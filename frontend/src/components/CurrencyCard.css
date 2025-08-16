@@ -3,28 +3,50 @@
   border-radius: 12px;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
   padding: 1.5rem;
-  transition: all 0.2s ease-in-out;
+  transition: all 0.3s ease-in-out;
   cursor: pointer;
-  border: 1px solid #e5e7eb;
+  border: 2px solid transparent;
   min-height: 200px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   position: relative;
+  overflow: hidden;
+  z-index: 1;
+}
+
+.currency-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.currency-card:hover::before {
+  opacity: 1;
 }
 
 .currency-card:hover {
-  transform: scale(1.02);
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  border-color: rgba(102, 126, 234, 0.3);
 }
 
 .currency-card.selected {
   border: 3px solid #667eea;
   box-shadow: 0 8px 25px -5px rgba(102, 126, 234, 0.4);
-  transform: scale(1.02);
+  transform: translateY(-2px) scale(1.02);
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
 }
 
-.currency-card.selected::before {
+.currency-card.selected::after {
   content: '';
   position: absolute;
   top: -3px;
@@ -33,7 +55,18 @@
   bottom: -3px;
   background: linear-gradient(135deg, #667eea, #764ba2);
   border-radius: 15px;
-  z-index: -1;
+  z-index: 0;
+  pointer-events: none;
+  animation: borderGlow 2s ease-in-out infinite alternate;
+}
+
+@keyframes borderGlow {
+  0% {
+    box-shadow: 0 0 20px rgba(102, 126, 234, 0.6);
+  }
+  100% {
+    box-shadow: 0 0 30px rgba(102, 126, 234, 0.8);
+  }
 }
 
 .currency-header {
@@ -42,6 +75,7 @@
   align-items: center;
   margin-bottom: 1rem;
   position: relative;
+  z-index: 1;
 }
 
 .currency-title {
@@ -109,6 +143,8 @@
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  position: relative;
+  z-index: 1;
 }
 
 .sentiment-info {
@@ -153,6 +189,8 @@
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  position: relative;
+  z-index: 1;
 }
 
 .last-updated {
@@ -163,17 +201,36 @@
 .click-hint {
   font-size: 0.75rem;
   color: #667eea;
-  font-weight: 500;
+  font-weight: 600;
   text-align: center;
-  padding: 0.25rem 0.5rem;
-  background: rgba(102, 126, 234, 0.1);
-  border-radius: 4px;
-  transition: all 0.2s ease;
+  padding: 0.5rem 0.75rem;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+  border-radius: 8px;
+  transition: all 0.3s ease;
+  border: 1px solid rgba(102, 126, 234, 0.2);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.7rem;
 }
 
 .currency-card:hover .click-hint {
-  background: rgba(102, 126, 234, 0.2);
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.2) 0%, rgba(118, 75, 162, 0.2) 100%);
   color: #4f46e5;
+  border-color: rgba(102, 126, 234, 0.4);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+}
+
+.currency-card.selected .click-hint {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(220, 38, 38, 0.1) 100%);
+  color: #dc2626;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.currency-card:active {
+  background-color: #ffeb3b !important;
+  transform: scale(0.98);
+  transition: all 0.1s ease;
 }
 
 /* Responsive design */

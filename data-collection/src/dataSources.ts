@@ -48,7 +48,7 @@ export const economicCalendarAPI: DataSource = {
       previousValue: parseFloat(item.Previous) || undefined,
       impact: mapImportance(item.Importance),
       sentiment: calculateSentiment(item.Actual, item.Forecast),
-      confidenceScore: calculateConfidence(item.Importance),
+      confidenceScore: Math.round(calculateConfidence(item.Importance)),
       source: 'Trading Economics',
       url: `https://tradingeconomics.com/calendar`
     }));
@@ -77,7 +77,7 @@ export const alphaVantageAPI: DataSource = {
           actualValue: parseFloat(item.value) || undefined,
           impact: 'MEDIUM',
           sentiment: 'NEUTRAL',
-          confidenceScore: 60,
+          confidenceScore: Math.round(Number(60) || 50),
           source: 'Alpha Vantage'
         });
       });
@@ -105,7 +105,7 @@ export const forexFactoryAPI: DataSource = {
       eventDate: new Date(item.date),
       impact: mapForexFactoryImpact(item.impact),
       sentiment: 'NEUTRAL', // Will be calculated based on actual vs forecast
-      confidenceScore: 50,
+      confidenceScore: Math.round(50),
       source: 'Forex Factory'
     }));
   }
@@ -133,7 +133,7 @@ export const fredAPI: DataSource = {
             actualValue: parseFloat(obs.value),
             impact: 'MEDIUM',
             sentiment: 'NEUTRAL',
-            confidenceScore: 70,
+            confidenceScore: Math.round(70),
             source: 'Federal Reserve Economic Data'
           });
         }
@@ -166,7 +166,7 @@ export const newsAPI: DataSource = {
             eventDate: new Date(article.publishedAt),
             impact: 'LOW',
             sentiment: analyzeSentimentFromText(article.title + ' ' + article.description),
-            confidenceScore: 40,
+            confidenceScore: Math.round(40),
             source: article.source.name,
             url: article.url
           });

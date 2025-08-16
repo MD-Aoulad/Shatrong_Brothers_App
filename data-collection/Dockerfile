@@ -1,5 +1,8 @@
 FROM node:18-alpine
 
+# Install Python and build tools for node-gyp
+RUN apk add --no-cache python3 make g++
+
 WORKDIR /app
 
 # Copy package files

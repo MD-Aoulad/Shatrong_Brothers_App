@@ -136,6 +136,8 @@ To empower Forex traders with data-driven fundamental analysis by collecting, an
 - Fiscal/politics (budgets, issuance, elections, sanctions/tariffs)
 - Cross-asset (real yields, curves, credit, equities, vol, basis)
 
+---
+
 ## User Experience Design
 
 ### User Interface Design Principles
@@ -300,19 +302,6 @@ interface CatalystEvent {
 }
 ```
 
-#### API Endpoints
-```
-GET /api/v1/sentiment/{currency} - Current sentiment for currency
-GET /api/v1/events/{currency} - Recent events for currency
-GET /api/v1/historical/{currency} - Historical sentiment data
-GET /api/v1/dashboard - Dashboard overview
-POST /api/v1/alerts - Create custom alerts
-GET /api/v1/strategy/backtest - Backtest trading strategy
-GET /api/v1/scorecard/{currency} - Current bias scorecard (pillars, score, bias)
-POST /api/v1/scorecard/recompute - Recompute bias scorecard from latest data
-GET /api/v1/calendar/{currency} - Upcoming catalysts calendar with skew
-```
-
 ### Technology Stack
 
 #### Frontend
@@ -336,6 +325,739 @@ GET /api/v1/calendar/{currency} - Upcoming catalysts calendar with skew
 - **CI/CD**: GitHub Actions
 - **Monitoring**: Prometheus + Grafana
 - **Logging**: ELK Stack
+
+---
+
+## API Documentation
+
+### Authentication
+All API endpoints require authentication using JWT tokens in the Authorization header:
+```
+Authorization: Bearer <jwt_token>
+```
+
+### Base URL
+```
+Production: https://api.forexfundamental.com/v1
+Development: http://localhost:3000/api/v1
+```
+
+### Core Endpoints
+
+#### 1. Sentiment Analysis
+```http
+GET /sentiment/{currency}
+```
+**Response:**
+```json
+{
+  "currency": "EUR",
+  "currentSentiment": "BULLISH",
+  "confidenceScore": 85,
+  "trend": "STRENGTHENING",
+  "lastUpdated": "2024-02-15T10:30:00Z",
+  "recentEvents": [...]
+}
+```
+
+#### 2. Economic Events
+```http
+GET /events/{currency}?limit=10&startDate=2024-01-01&endDate=2024-02-15
+```
+**Query Parameters:**
+- `limit`: Number of events to return (default: 20, max: 100)
+- `startDate`: Start date in ISO format
+- `endDate`: End date in ISO format
+- `eventType`: Filter by event type
+- `impact`: Filter by impact level
+
+#### 3. Bias Scorecard
+```http
+GET /scorecard/{currency}
+```
+**Response:**
+```json
+{
+  "currency": "EUR",
+  "pillars": [
+    {
+      "pillar": "POLICY",
+      "score": 1.2,
+      "weight": 0.25,
+      "rationale": "ECB maintaining dovish stance with negative rates"
+    }
+  ],
+  "weightedBiasScore": 0.8,
+  "bias": "BULLISH",
+  "updatedAt": "2024-02-15T10:30:00Z"
+}
+```
+
+#### 4. Catalysts Calendar
+```http
+GET /calendar/{currency}?startDate=2024-02-15&endDate=2024-03-01
+```
+
+#### 5. Historical Data
+```http
+GET /historical/{currency}?startDate=2024-01-01&endDate=2024-02-15&granularity=daily
+```
+
+### WebSocket Endpoints
+
+#### Real-time Updates
+```javascript
+// Connect to WebSocket
+const socket = io('wss://api.forexfundamental.com');
+
+// Subscribe to currency updates
+socket.emit('subscribe', { currency: 'EUR' });
+
+// Listen for real-time updates
+socket.on('sentiment_update', (data) => {
+  console.log('New sentiment data:', data);
+});
+```
+
+### Rate Limiting
+- **Free Tier**: 100 requests/hour
+- **Premium Tier**: 1000 requests/hour
+- **Enterprise**: Custom limits
+
+---
+
+## Database Schema
+
+### PostgreSQL Tables
+
+#### 1. currencies
+```sql
+CREATE TABLE currencies (
+  id SERIAL PRIMARY KEY,
+  code VARCHAR(3) UNIQUE NOT NULL,
+  name VARCHAR(100) NOT NULL,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+#### 2. economic_events
+```sql
+CREATE TABLE economic_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  currency_id INTEGER REFERENCES currencies(id),
+  event_type VARCHAR(50) NOT NULL,
+  title VARCHAR(500) NOT NULL,
+  description TEXT,
+  event_date TIMESTAMP NOT NULL,
+  actual_value DECIMAL(15,4),
+  expected_value DECIMAL(15,4),
+  previous_value DECIMAL(15,4),
+  impact VARCHAR(10) CHECK (impact IN ('HIGH', 'MEDIUM', 'LOW')),
+  sentiment VARCHAR(10) CHECK (sentiment IN ('BULLISH', 'BEARISH', 'NEUTRAL')),
+  confidence_score INTEGER CHECK (confidence_score >= 0 AND confidence_score <= 100),
+  price_impact DECIMAL(8,4),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+#### 3. bias_pillars
+```sql
+CREATE TABLE bias_pillars (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(100) UNIQUE NOT NULL,
+  weight DECIMAL(3,2) NOT NULL,
+  description TEXT,
+  is_active BOOLEAN DEFAULT true
+);
+```
+
+#### 4. currency_bias_scores
+```sql
+CREATE TABLE currency_bias_scores (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  currency_id INTEGER REFERENCES currencies(id),
+  pillar_id INTEGER REFERENCES bias_pillars(id),
+  score DECIMAL(3,2) NOT NULL,
+  rationale TEXT,
+  calculated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+#### 5. catalyst_events
+```sql
+CREATE TABLE catalyst_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  currency_id INTEGER REFERENCES currencies(id),
+  event_date TIMESTAMP NOT NULL,
+  title VARCHAR(500) NOT NULL,
+  category VARCHAR(50) NOT NULL,
+  expected_value TEXT,
+  previous_value TEXT,
+  impact VARCHAR(10) CHECK (impact IN ('HIGH', 'MEDIUM', 'LOW')),
+  skew VARCHAR(10) CHECK (skew IN ('BULLISH', 'BEARISH', 'NEUTRAL')),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### Redis Data Structures
+
+#### 1. Real-time Sentiment Cache
+```
+Key: sentiment:{currency}:current
+Value: JSON string of current sentiment data
+TTL: 5 minutes
+```
+
+#### 2. Event Cache
+```
+Key: events:{currency}:recent
+Value: JSON array of recent events
+TTL: 10 minutes
+```
+
+#### 3. User Session Cache
+```
+Key: session:{user_id}
+Value: JSON string of user session data
+TTL: 24 hours
+```
+
+### InfluxDB Measurements
+
+#### 1. sentiment_time_series
+```
+measurement: sentiment_time_series
+tags: currency, pillar
+fields: score, confidence, price_impact
+timestamp: event_time
+```
+
+#### 2. economic_indicators
+```
+measurement: economic_indicators
+tags: currency, indicator_type, source
+fields: value, expected, previous, surprise
+timestamp: release_time
+```
+
+---
+
+## Deployment Guide
+
+### Prerequisites
+- Docker and Docker Compose installed
+- Kubernetes cluster (minikube for local development)
+- kubectl configured
+- Helm 3.x installed
+
+### Local Development Setup
+
+#### 1. Clone Repository
+```bash
+git clone https://github.com/your-org/forex-fundamental-app.git
+cd forex-fundamental-app
+```
+
+#### 2. Environment Configuration
+```bash
+# Copy environment files
+cp .env.example .env
+cp docker-compose.override.yml.example docker-compose.override.yml
+
+# Edit environment variables
+nano .env
+```
+
+#### 3. Start Services
+```bash
+# Start all services
+docker-compose up -d
+
+# Check service status
+docker-compose ps
+
+# View logs
+docker-compose logs -f [service_name]
+```
+
+### Kubernetes Deployment
+
+#### 1. Create Namespace
+```bash
+kubectl create namespace forex-app
+kubectl config set-context --current --namespace=forex-app
+```
+
+#### 2. Deploy Infrastructure
+```bash
+# Deploy PostgreSQL
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm install postgres bitnami/postgresql \
+  --namespace forex-app \
+  --set postgresqlPassword=your_password
+
+# Deploy Redis
+helm install redis bitnami/redis \
+  --namespace forex-app \
+  --set auth.password=your_password
+
+# Deploy Kafka
+helm repo add confluentinc https://confluentinc.github.io/cqrs-helm-charts/
+helm install kafka confluentinc/cp-kafka \
+  --namespace forex-app
+```
+
+#### 3. Deploy Application Services
+```bash
+# Deploy API Gateway
+kubectl apply -f k8s/api-gateway.yaml
+
+# Deploy Data Collection Service
+kubectl apply -f k8s/data-collection.yaml
+
+# Deploy Data Processing Service
+kubectl apply -f k8s/data-processing.yaml
+
+# Deploy Frontend
+kubectl apply -f k8s/frontend.yaml
+```
+
+#### 4. Configure Ingress
+```bash
+# Deploy NGINX Ingress Controller
+kubectl apply -f k8s/ingress.yaml
+
+# Configure SSL certificates
+kubectl apply -f k8s/cert-manager.yaml
+```
+
+### Production Deployment
+
+#### 1. Environment Variables
+```bash
+# Production environment file
+cp .env.production .env
+```
+
+#### 2. Resource Limits
+```yaml
+# k8s/deployment.yaml
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "250m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+```
+
+#### 3. Horizontal Pod Autoscaling
+```yaml
+# k8s/hpa.yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api-gateway-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: api-gateway
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+```
+
+---
+
+## Testing Strategy
+
+### Testing Pyramid
+
+#### 1. Unit Tests (70%)
+- **Coverage**: Individual functions and components
+- **Framework**: Jest for backend, React Testing Library for frontend
+- **Target**: 90%+ code coverage
+
+```typescript
+// Example unit test
+describe('CurrencyStrengthCalculator', () => {
+  it('should calculate correct bias score', () => {
+    const calculator = new CurrencyStrengthCalculator();
+    const result = calculator.calculateBias(mockPillarData);
+    expect(result.bias).toBe('BULLISH');
+    expect(result.score).toBeGreaterThan(0.6);
+  });
+});
+```
+
+#### 2. Integration Tests (20%)
+- **Coverage**: Service interactions and API endpoints
+- **Framework**: Jest with supertest for API testing
+- **Database**: Test containers for isolated testing
+
+```typescript
+// Example integration test
+describe('Sentiment API', () => {
+  it('should return sentiment for currency', async () => {
+    const response = await request(app)
+      .get('/api/v1/sentiment/EUR')
+      .expect(200);
+    
+    expect(response.body.currency).toBe('EUR');
+    expect(response.body.currentSentiment).toBeDefined();
+  });
+});
+```
+
+#### 3. End-to-End Tests (10%)
+- **Coverage**: Complete user workflows
+- **Framework**: Cypress for frontend, Playwright for API
+- **Environment**: Staging environment with test data
+
+```typescript
+// Example E2E test
+describe('Dashboard Workflow', () => {
+  it('should display currency sentiment correctly', () => {
+    cy.visit('/dashboard');
+    cy.get('[data-testid="eur-sentiment"]').should('contain', 'BULLISH');
+    cy.get('[data-testid="eur-confidence"]').should('contain', '85%');
+  });
+});
+```
+
+### Test Data Management
+
+#### 1. Test Fixtures
+```typescript
+// test/fixtures/economicEvents.ts
+export const mockEconomicEvents = [
+  {
+    id: '1',
+    currency: 'EUR',
+    eventType: 'CPI',
+    title: 'Eurozone CPI Data',
+    date: '2024-02-15T10:00:00Z',
+    impact: 'HIGH',
+    sentiment: 'BULLISH',
+    confidenceScore: 85
+  }
+];
+```
+
+#### 2. Test Database
+```yaml
+# docker-compose.test.yml
+services:
+  postgres-test:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: forex_test
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+    ports:
+      - "5433:5432"
+```
+
+### Performance Testing
+
+#### 1. Load Testing
+- **Tool**: Artillery.js or k6
+- **Scenarios**: High-frequency data updates, concurrent users
+- **Targets**: 1000+ concurrent users, <2s response time
+
+#### 2. Stress Testing
+- **Tool**: Apache JMeter
+- **Scenarios**: Peak load conditions, resource exhaustion
+- **Targets**: Identify breaking points and recovery behavior
+
+### Security Testing
+
+#### 1. Vulnerability Scanning
+- **Tool**: OWASP ZAP, Snyk
+- **Frequency**: Weekly automated scans
+- **Focus**: SQL injection, XSS, CSRF, authentication
+
+#### 2. Penetration Testing
+- **Frequency**: Quarterly manual testing
+- **Scope**: API endpoints, authentication, data access
+- **Reporting**: Detailed vulnerability reports with remediation
+
+---
+
+## Security Considerations
+
+### Authentication & Authorization
+
+#### 1. JWT Implementation
+```typescript
+// JWT configuration
+const jwtConfig = {
+  secret: process.env.JWT_SECRET,
+  expiresIn: '24h',
+  issuer: 'forex-fundamental-app',
+  audience: 'forex-traders'
+};
+
+// Token validation middleware
+const authenticateToken = (req, res, next) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) {
+    return res.status(401).json({ error: 'Access token required' });
+  }
+  
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (error) {
+    return res.status(403).json({ error: 'Invalid token' });
+  }
+};
+```
+
+#### 2. Role-Based Access Control
+```typescript
+// User roles
+enum UserRole {
+  FREE_USER = 'free_user',
+  PREMIUM_USER = 'premium_user',
+  ENTERPRISE_USER = 'enterprise_user',
+  ADMIN = 'admin'
+}
+
+// Permission middleware
+const requireRole = (roles: UserRole[]) => {
+  return (req, res, next) => {
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+    next();
+  };
+};
+```
+
+### Data Protection
+
+#### 1. Encryption
+- **At Rest**: AES-256 encryption for sensitive data
+- **In Transit**: TLS 1.3 for all communications
+- **API Keys**: Encrypted storage with key rotation
+
+#### 2. Data Privacy
+- **GDPR Compliance**: User consent, data portability, right to deletion
+- **Data Retention**: Configurable retention policies
+- **Anonymization**: PII removal for analytics
+
+### API Security
+
+#### 1. Rate Limiting
+```typescript
+// Rate limiting configuration
+const rateLimit = require('express-rate-limit');
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: 'Too many requests from this IP'
+});
+
+app.use('/api/', apiLimiter);
+```
+
+#### 2. Input Validation
+```typescript
+// Input sanitization
+import { body, validationResult } from 'express-validator';
+
+const validateEvent = [
+  body('currency').isIn(['EUR', 'USD', 'JPY', 'GBP']),
+  body('eventType').isLength({ min: 1, max: 50 }),
+  body('title').isLength({ min: 1, max: 500 }),
+  body('date').isISO8601(),
+  body('impact').isIn(['HIGH', 'MEDIUM', 'LOW']),
+  (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    next();
+  }
+];
+```
+
+### Infrastructure Security
+
+#### 1. Network Security
+- **VPC**: Isolated network segments
+- **Firewall**: Restrictive inbound/outbound rules
+- **VPN**: Secure access to production environments
+
+#### 2. Container Security
+- **Image Scanning**: Vulnerability scanning for all container images
+- **Runtime Security**: Pod security policies, network policies
+- **Secrets Management**: Kubernetes secrets, external secret operators
+
+---
+
+## Monitoring and Alerting
+
+### Application Monitoring
+
+#### 1. Metrics Collection
+```typescript
+// Prometheus metrics
+import prometheus from 'prom-client';
+
+const httpRequestDuration = new prometheus.Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'Duration of HTTP requests in seconds',
+  labelNames: ['method', 'route', 'status_code']
+});
+
+const sentimentCalculationDuration = new prometheus.Histogram({
+  name: 'sentiment_calculation_duration_seconds',
+  help: 'Duration of sentiment calculation in seconds',
+  labelNames: ['currency', 'pillar']
+});
+```
+
+#### 2. Health Checks
+```typescript
+// Health check endpoint
+app.get('/health', async (req, res) => {
+  try {
+    // Check database connectivity
+    await db.query('SELECT 1');
+    
+    // Check Redis connectivity
+    await redis.ping();
+    
+    // Check external APIs
+    const apiHealth = await checkExternalAPIs();
+    
+    res.json({
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      services: {
+        database: 'healthy',
+        redis: 'healthy',
+        externalAPIs: apiHealth
+      }
+    });
+  } catch (error) {
+    res.status(503).json({
+      status: 'unhealthy',
+      error: error.message
+    });
+  }
+});
+```
+
+### Infrastructure Monitoring
+
+#### 1. Kubernetes Monitoring
+```yaml
+# k8s/monitoring.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+    scrape_configs:
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+```
+
+#### 2. Resource Monitoring
+- **CPU/Memory**: Pod resource usage and limits
+- **Network**: Ingress/egress traffic, latency
+- **Storage**: Database performance, disk usage
+
+### Alerting Rules
+
+#### 1. Critical Alerts
+```yaml
+# prometheus/alertmanager.yml
+groups:
+  - name: critical
+    rules:
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value }} errors per second"
+```
+
+#### 2. Warning Alerts
+```yaml
+      - alert: HighLatency
+        expr: histogram_quantile(0.95, http_request_duration_seconds) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High latency detected"
+          description: "95th percentile latency is {{ $value }}s"
+```
+
+### Logging Strategy
+
+#### 1. Structured Logging
+```typescript
+// Winston logger configuration
+import winston from 'winston';
+
+const logger = winston.createLogger({
+  level: 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.errors({ stack: true }),
+    winston.format.json()
+  ),
+  transports: [
+    new winston.transports.File({ filename: 'error.log', level: 'error' }),
+    new winston.transports.File({ filename: 'combined.log' })
+  ]
+});
+```
+
+#### 2. Log Aggregation
+- **ELK Stack**: Elasticsearch, Logstash, Kibana
+- **Centralized Storage**: All service logs in one location
+- **Search & Analysis**: Full-text search and log analysis
+
+### Performance Monitoring
+
+#### 1. Real-time Dashboards
+- **Grafana**: Custom dashboards for key metrics
+- **Business Metrics**: User engagement, API usage, error rates
+- **Technical Metrics**: Response times, throughput, resource usage
+
+#### 2. SLA Monitoring
+- **Uptime**: 99.9% availability target
+- **Response Time**: <2 seconds for 95% of requests
+- **Data Freshness**: <5 minutes for real-time data
 
 ---
 
@@ -430,3 +1152,22 @@ The phased development approach ensures we can deliver value quickly while build
 3. Data source integration planning
 4. Development environment setup
 5. MVP development kickoff
+
+---
+
+## Appendices
+
+### A. API Response Examples
+Detailed examples of all API responses with sample data.
+
+### B. Database Migration Scripts
+SQL scripts for database schema changes and data migrations.
+
+### C. Configuration Files
+Complete configuration files for all services and environments.
+
+### D. Troubleshooting Guide
+Common issues and their solutions for development and production.
+
+### E. Performance Benchmarks
+Performance test results and optimization recommendations.

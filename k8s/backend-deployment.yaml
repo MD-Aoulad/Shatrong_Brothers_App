@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fx-backend
+  labels:
+    app: fx-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fx-backend
+  template:
+    metadata:
+      labels:
+        app: fx-backend
+    spec:
+      containers:
+        - name: fx-backend
+          image: fx-backend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fx-backend
+  labels:
+    app: fx-backend
+spec:
+  selector:
+    app: fx-backend
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+  type: ClusterIP
+
+

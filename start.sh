@@ -8,6 +8,19 @@ if ! docker info > /dev/null 2>&1; then
     exit 1
 fi
 
+# Check if .env file exists
+if [ ! -f .env ]; then
+    echo "⚠️  .env file not found. Creating from template..."
+    if [ -f env.template ]; then
+        cp env.template .env
+        echo "✅ Created .env file from template"
+        echo "📝 Please review and modify .env file if needed"
+    else
+        echo "❌ env.template not found. Please create .env file manually"
+        exit 1
+    fi
+fi
+
 # Stop any existing containers
 echo "🛑 Stopping existing containers..."
 docker-compose down

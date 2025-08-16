@@ -32,30 +32,133 @@ redis.connect().catch(console.error);
 
 import { fetchFromAllSources, createRateLimiter } from './dataSources';
 import { fetchHighImpactEvents } from './highImpactEvents';
+import MT5Connector from './mt5Connector';
+import RealTimeEconomicData from './realTimeEconomicData';
+import FinancialNewsCollector from './financialNewsCollector';
 
 // Rate limiter to respect API limits
 const rateLimitedFetch = createRateLimiter(5); // 5 requests per minute
 
-// Enhanced data collection function with real data sources
+// Initialize MT5 connector
+const mt5Connector = new MT5Connector();
+
+// Initialize real-time economic data collector
+const realTimeData = new RealTimeEconomicData();
+
+// Initialize financial news collector
+const newsCollector = new FinancialNewsCollector();
+
+// Enhanced data collection function with MT5 integration
 async function collectEconomicData() {
   try {
     console.log('🔄 Collecting economic data from multiple sources...');
     
-    // Fetch high-impact events first (NFP, Fed decisions, etc.)
-    const highImpactEvents = await rateLimitedFetch(async () => {
-      return await fetchHighImpactEvents();
-    });
+    let allEvents: any[] = [];
     
-    // Fetch additional data from other sources
-    const otherEvents = await rateLimitedFetch(async () => {
-      return await fetchFromAllSources();
-    });
+    // 1. Try to get data from MT5 first (highest priority)
+    console.log('🔌 Attempting MT5 connection...');
+    try {
+      const mt5Connected = await mt5Connector.connect();
+      console.log(`📱 MT5 connection result: ${mt5Connected}`);
+      
+      if (mt5Connected) {
+        console.log('📱 MT5 connected successfully, fetching data...');
+        
+        // Get economic calendar for next 7 days
+        const startDate = new Date();
+        const endDate = new Date();
+        endDate.setDate(endDate.getDate() + 7);
+        
+        console.log('📅 Fetching MT5 economic calendar...');
+        const mt5CalendarEvents = await mt5Connector.getEconomicCalendar(startDate, endDate);
+        console.log(`📅 MT5 Calendar events: ${mt5CalendarEvents.length}`);
+        
+        console.log('📰 Fetching MT5 news data...');
+        const mt5NewsEvents = await mt5Connector.getNewsData();
+        console.log(`📰 MT5 News events: ${mt5NewsEvents.length}`);
+        
+        console.log(`📊 MT5: ${mt5CalendarEvents.length} calendar events + ${mt5NewsEvents.length} news items`);
+        allEvents.push(...mt5CalendarEvents, ...mt5NewsEvents);
+        
+        // Get market sentiment from MT5
+        console.log('📈 Fetching MT5 market sentiment...');
+        const mt5Sentiment = await mt5Connector.getMarketSentiment();
+        console.log('📈 MT5 Market Sentiment:', mt5Sentiment);
+        
+        // Update currency sentiments with MT5 data
+        await updateCurrencySentimentsWithMT5(mt5Sentiment);
+        
+        // If we got MT5 data, skip the problematic external APIs
+        if (mt5CalendarEvents.length > 0 || mt5NewsEvents.length > 0) {
+          console.log('✅ MT5 data collected successfully, skipping external APIs');
+          // Continue with the rest of the function to ensure proper return
+        }
+        
+      } else {
+        console.log('⚠️ MT5 connection failed, falling back to other sources');
+      }
+    } catch (mt5Error) {
+      console.log('⚠️ MT5 error:', mt5Error);
+      console.log('⚠️ MT5 error details:', JSON.stringify(mt5Error));
+    }
     
-    const realEvents = [...highImpactEvents, ...otherEvents];
-    console.log(`📊 Collected ${highImpactEvents.length} high-impact events + ${otherEvents.length} other events = ${realEvents.length} total`);
+    // 2. Get real-time economic indicators (critical for currency strength)
+    console.log('📊 Fetching real-time economic indicators...');
+    try {
+      const usdIndicators = await realTimeData.getUSDIndicators();
+      const eurIndicators = await realTimeData.getEURIndicators();
+      const jpyIndicators = await realTimeData.getJPYIndicators();
+      const gbpIndicators = await realTimeData.getGBPIndicators();
+      
+      const allIndicators = [...usdIndicators, ...eurIndicators, ...jpyIndicators, ...gbpIndicators];
+      const indicatorEvents = realTimeData.convertToEconomicEvents(allIndicators);
+      
+      console.log(`📈 Real-time indicators: USD(${usdIndicators.length}), EUR(${eurIndicators.length}), JPY(${jpyIndicators.length}), GBP(${gbpIndicators.length})`);
+      allEvents.push(...indicatorEvents);
+      
+    } catch (error) {
+      console.error('Error fetching real-time indicators:', error);
+    }
     
-    // Use real events if available, otherwise fall back to high-impact demo data
-    const eventsToProcess = realEvents.length > 0 ? realEvents : [
+    // 3. Collect financial news (critical for sentiment analysis)
+    console.log('📰 Collecting financial news...');
+    try {
+      const financialNews = await newsCollector.collectFinancialNews();
+      const newsEvents = newsCollector.convertNewsToEconomicEvents(financialNews);
+      
+      console.log(`📰 Financial news: ${financialNews.length} articles collected`);
+      allEvents.push(...newsEvents);
+      
+    } catch (error) {
+      console.error('Error collecting financial news:', error);
+    }
+    
+    // 4. Fetch high-impact events from other sources (fallback)
+    if (allEvents.length === 0) {
+      console.log('📊 Fetching high-impact events from fallback sources...');
+      const highImpactEvents = await rateLimitedFetch(async () => {
+        return await fetchHighImpactEvents();
+      });
+      allEvents.push(...highImpactEvents);
+    }
+    
+    // 5. Fetch additional data from other sources (complementary) - TEMPORARILY DISABLED
+    console.log('⚠️ Temporarily disabling external data sources to test MT5 connector...');
+    // const otherEvents = await rateLimitedFetch(async () => {
+    //   return await fetchFromAllSources();
+    // });
+    // allEvents.push(...otherEvents);
+    
+    console.log(`📊 Total collected events: ${allEvents.length}`);
+    
+    // Validate and fix confidence scores for all events
+    const validatedEvents = allEvents.map(event => ({
+      ...event,
+      confidenceScore: Math.round(Number(event.confidenceScore) || 50)
+    }));
+    
+    // Use collected events if available, otherwise fall back to demo data
+    const eventsToProcess = validatedEvents.length > 0 ? validatedEvents : [
       {
         currency: 'USD' as const,
         eventType: 'EMPLOYMENT',
@@ -87,21 +190,6 @@ async function collectEconomicData() {
         source: 'Live Demo - High Impact'
       },
       {
-        currency: 'USD' as const,
-        eventType: 'CPI',
-        title: 'US Consumer Price Index (CPI)',
-        description: 'US inflation data - Core CPI excluding food and energy',
-        eventDate: new Date(new Date().getTime() - 2 * 60 * 60 * 1000), // 2 hours ago
-        actualValue: 0.3,
-        expectedValue: 0.2,
-        previousValue: 0.2,
-        impact: 'HIGH' as const,
-        sentiment: 'BEARISH' as const,
-        confidenceScore: 88,
-        priceImpact: -0.6,
-        source: 'Live Demo - High Impact'
-      },
-      {
         currency: 'EUR' as const,
         eventType: 'INTEREST_RATE',
         title: 'ECB Interest Rate Decision',
@@ -114,36 +202,6 @@ async function collectEconomicData() {
         sentiment: 'BEARISH' as const,
         confidenceScore: 85,
         priceImpact: -0.7,
-        source: 'Live Demo - High Impact'
-      },
-      {
-        currency: 'GBP' as const,
-        eventType: 'EMPLOYMENT',
-        title: 'UK Employment Change',
-        description: 'Change in number of employed people in the UK',
-        eventDate: new Date(new Date().getTime() - 4 * 60 * 60 * 1000), // 4 hours ago
-        actualValue: 25000,
-        expectedValue: 15000,
-        previousValue: 10000,
-        impact: 'HIGH' as const,
-        sentiment: 'BULLISH' as const,
-        confidenceScore: 82,
-        priceImpact: 0.5,
-        source: 'Live Demo - High Impact'
-      },
-      {
-        currency: 'JPY' as const,
-        eventType: 'INTEREST_RATE',
-        title: 'BOJ Interest Rate Decision',
-        description: 'Bank of Japan monetary policy decision',
-        eventDate: new Date(new Date().getTime() - 5 * 60 * 60 * 1000), // 5 hours ago
-        actualValue: -0.1,
-        expectedValue: -0.1,
-        previousValue: -0.1,
-        impact: 'HIGH' as const,
-        sentiment: 'NEUTRAL' as const,
-        confidenceScore: 75,
-        priceImpact: 0,
         source: 'Live Demo - High Impact'
       }
     ];
@@ -166,7 +224,7 @@ async function collectEconomicData() {
         event.previousValue,
         event.impact,
         event.sentiment,
-        event.confidenceScore,
+        Math.round(Number(event.confidenceScore) || 50), // Ensure integer with fallback
         event.priceImpact,
         event.source
       ]);
@@ -192,10 +250,47 @@ async function collectEconomicData() {
 
   } catch (error) {
     console.error('Error collecting economic data:', error);
+  } finally {
+    // Disconnect from MT5
+    await mt5Connector.disconnect();
   }
 }
 
-// Update currency sentiments
+// Update currency sentiments with MT5 data
+async function updateCurrencySentimentsWithMT5(mt5Sentiment: { [currency: string]: number }) {
+  try {
+    console.log('Updating currency sentiments with MT5 data...');
+    
+    for (const [currency, sentimentScore] of Object.entries(mt5Sentiment)) {
+      let currentSentiment = 'NEUTRAL';
+      let confidenceScore = Math.abs(sentimentScore);
+      
+      if (sentimentScore > 60) {
+        currentSentiment = 'BULLISH';
+      } else if (sentimentScore < 40) {
+        currentSentiment = 'BEARISH';
+      }
+
+      // Update sentiment in database
+      await pool.query(`
+        INSERT INTO currency_sentiments (currency, current_sentiment, confidence_score, trend)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (currency) DO UPDATE SET
+        current_sentiment = EXCLUDED.current_sentiment,
+        confidence_score = EXCLUDED.confidence_score,
+        trend = EXCLUDED.trend,
+        last_updated = NOW()
+      `, [currency, currentSentiment, confidenceScore, 'STABLE']);
+
+      console.log(`Updated MT5 sentiment for ${currency}: ${currentSentiment} (${confidenceScore}%)`);
+    }
+
+  } catch (error) {
+    console.error('Error updating currency sentiments with MT5:', error);
+  }
+}
+
+// Update currency sentiments (fallback method)
 async function updateCurrencySentiments() {
   try {
     console.log('Updating currency sentiments...');
@@ -275,7 +370,8 @@ async function startDataCollection() {
     console.log('📊 Scheduled tasks:');
     console.log('   • Economic data collection: every 5 minutes');
     console.log('   • Currency sentiment updates: every 10 minutes');
-    console.log('   • Real-time data sources: enabled');
+    console.log('   • MT5 integration: enabled (primary source)');
+    console.log('   • Fallback sources: enabled');
 
   } catch (error) {
     console.error('❌ Failed to start data collection service:', error);

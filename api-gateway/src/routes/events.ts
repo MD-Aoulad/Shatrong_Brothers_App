@@ -1,23 +1,14 @@
 import { Router } from 'express';
-import { Pool } from 'pg';
+import { query } from '../config/database';
 
 const router = Router();
-
-// Database connection
-const pool = new Pool({
-  host: process.env.POSTGRES_HOST || 'postgres',
-  port: parseInt(process.env.POSTGRES_PORT || '5432'),
-  database: process.env.POSTGRES_DB || 'forex_app',
-  user: process.env.POSTGRES_USER || 'postgres',
-  password: process.env.POSTGRES_PASSWORD || 'postgres'
-});
 
 // GET /api/v1/events - Get all economic events (existing endpoint)
 router.get('/', async (req, res) => {
   try {
     const { currency, limit = 50, offset = 0 } = req.query;
     
-    let query = `
+    let sqlQuery = `
       SELECT id, currency, event_type, title, description, event_date, 
              actual_value, expected_value, previous_value, impact, sentiment, 
              confidence_score, price_impact, source, url, created_at
@@ -33,13 +24,13 @@ router.get('/', async (req, res) => {
     }
     
     if (conditions.length > 0) {
-      query += ` WHERE ${conditions.join(' AND ')}`;
+      sqlQuery += ` WHERE ${conditions.join(' AND ')}`;
     }
     
-    query += ` ORDER BY event_date DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    sqlQuery += ` ORDER BY event_date DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(limit, offset);
     
-    const result = await pool.query(query, params);
+    const result = await query(sqlQuery, params);
     
     res.json(result.rows);
   } catch (error) {
@@ -134,7 +125,7 @@ router.post('/add', async (req, res): Promise<void> => {
       url || null
     ];
 
-    const result = await pool.query(insertQuery, values);
+    const result = await query(insertQuery, values);
     const savedEvent = result.rows[0];
 
     // Log the addition
@@ -179,7 +170,7 @@ router.put('/:id', async (req, res): Promise<void> => {
 
     // Check if event exists
     const checkQuery = 'SELECT id FROM economic_events WHERE id = $1';
-    const checkResult = await pool.query(checkQuery, [id]);
+    const checkResult = await query(checkQuery, [id]);
     
     if (checkResult.rows.length === 0) {
       res.status(404).json({ error: 'Economic event not found' });
@@ -265,7 +256,7 @@ router.put('/:id', async (req, res): Promise<void> => {
       RETURNING *
     `;
 
-    const result = await pool.query(updateQuery, values);
+    const result = await query(updateQuery, values);
     const updatedEvent = result.rows[0];
 
     console.log(`📝 Economic event updated: ${updatedEvent.title} (${updatedEvent.currency})`);
@@ -292,7 +283,7 @@ router.delete('/:id', async (req, res): Promise<void> => {
 
     // Check if event exists
     const checkQuery = 'SELECT id, title, currency FROM economic_events WHERE id = $1';
-    const checkResult = await pool.query(checkQuery, [id]);
+    const checkResult = await query(checkQuery, [id]);
     
     if (checkResult.rows.length === 0) {
       res.status(404).json({ error: 'Economic event not found' });
@@ -303,7 +294,7 @@ router.delete('/:id', async (req, res): Promise<void> => {
 
     // Delete the event
     const deleteQuery = 'DELETE FROM economic_events WHERE id = $1';
-    await pool.query(deleteQuery, [id]);
+    await query(deleteQuery, [id]);
 
     console.log(`🗑️ Economic event deleted: ${eventToDelete.title} (${eventToDelete.currency})`);
 
@@ -341,7 +332,7 @@ router.get('/statistics', async (req, res) => {
       FROM economic_events
     `;
 
-    const result = await pool.query(statsQuery);
+    const result = await query(statsQuery);
     const stats = result.rows[0];
 
     res.json({

@@ -23,6 +23,16 @@ const CurrencyCard: React.FC<CurrencyCardProps> = ({ sentiment, isSelected = fal
       .catch(() => {})
     return () => { mounted = false };
   }, [sentiment.currency]);
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (onClick) {
+      onClick();
+    }
+  };
+
   const getSentimentColor = (sentimentType: string) => {
     switch (sentimentType) {
       case 'BULLISH':
@@ -65,8 +75,9 @@ const CurrencyCard: React.FC<CurrencyCardProps> = ({ sentiment, isSelected = fal
   return (
     <div 
       className={`currency-card ${isSelected ? 'selected' : ''}`} 
-      onClick={onClick}
-      style={{ cursor: onClick ? 'pointer' : 'default' }}
+      onClick={handleClick}
+      style={{ cursor: 'pointer' }}
+      title={isSelected ? `Click to clear ${sentiment.currency} filter` : `Click to filter events for ${sentiment.currency}`}
     >
       <div className="currency-header">
         <h3 className="currency-title">{sentiment.currency}</h3>
@@ -106,11 +117,9 @@ const CurrencyCard: React.FC<CurrencyCardProps> = ({ sentiment, isSelected = fal
         <span className="last-updated">
           Updated: {new Date(sentiment.lastUpdated).toLocaleTimeString()}
         </span>
-        {onClick && (
-          <span className="click-hint">
-            {isSelected ? 'Click to clear filter' : 'Click to filter events'}
-          </span>
-        )}
+        <span className="click-hint">
+          {isSelected ? 'Click to clear filter' : 'Click to filter events'}
+        </span>
       </div>
     </div>
   );

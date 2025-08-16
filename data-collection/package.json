@@ -1,28 +1,38 @@
 {
   "name": "forex-data-collection",
   "version": "1.0.0",
-  "description": "Data collection service for Forex Fundamental Data App",
+  "description": "Forex data collection service with MT5 integration",
   "main": "dist/index.js",
   "scripts": {
-    "start": "node dist/index.js",
-    "dev": "nodemon src/index.ts",
     "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
     "test": "jest"
   },
   "dependencies": {
-    "axios": "^1.5.1",
+    "axios": "^1.6.0",
+    "cron": "^2.4.0",
     "dotenv": "^16.3.1",
     "kafkajs": "^2.2.4",
-    "node-cron": "^3.0.3",
+    "metaapi.cloud-sdk": "^23.0.0",
     "pg": "^8.11.3",
     "redis": "^4.6.10"
   },
   "devDependencies": {
+    "@types/cron": "^2.4.0",
     "@types/node": "^20.8.0",
-    "@types/node-cron": "^3.0.11",
-    "@types/pg": "^8.10.9",
-    "nodemon": "^3.0.1",
+    "@types/pg": "^8.10.7",
     "ts-node": "^10.9.1",
-    "typescript": "^5.9.2"
-  }
+    "typescript": "^5.2.2"
+  },
+  "keywords": [
+    "forex",
+    "trading",
+    "data-collection",
+    "mt5",
+    "metatrader",
+    "economic-calendar"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
 }

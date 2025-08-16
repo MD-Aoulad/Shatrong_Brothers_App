@@ -8,13 +8,14 @@ import ComprehensiveEventView from './ComprehensiveEventView';
 import SentimentAnalysisInfo from './SentimentAnalysisInfo';
 import AddNewsForm from './AddNewsForm';
 import EventManagement from './EventManagement';
+import MT5NewsWidget from './MT5NewsWidget';
 import { EconomicEvent, CurrencySentiment } from '../types';
 import './Dashboard.css';
 
 const Dashboard: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { data, loading, error } = useSelector((state: RootState) => state.dashboard);
-  const [activeView, setActiveView] = useState<'overview' | 'comprehensive' | 'algorithm' | 'manage'>('overview');
+  const [activeView, setActiveView] = useState<'overview' | 'comprehensive' | 'algorithm' | 'manage' | 'scorecard'>('overview');
   const [showAddNewsForm, setShowAddNewsForm] = useState(false);
   const [selectedCurrency, setSelectedCurrency] = useState<string | null>(null);
 
@@ -43,45 +44,39 @@ const Dashboard: React.FC = () => {
   };
 
   const handleCurrencyClick = (currency: string) => {
-    console.log('Currency clicked:', {
-      clickedCurrency: currency,
-      currentSelectedCurrency: selectedCurrency,
-      willSetTo: selectedCurrency === currency ? null : currency
-    });
+    console.log('🎯 Currency clicked:', currency);
+    console.log('🎯 Previous selection:', selectedCurrency);
+    
+    // Toggle selection: if same currency is clicked, deselect it; otherwise select the new one
     const newSelection = selectedCurrency === currency ? null : currency;
-    console.log('Setting selectedCurrency to:', newSelection);
     setSelectedCurrency(newSelection);
     
-    // Force a re-render by updating a dummy state
-    setTimeout(() => {
-      console.log('After state update - selectedCurrency:', selectedCurrency);
-      console.log('Filtered events count:', getFilteredEvents().length);
-      console.log('Display events count:', getDisplayEvents().length);
-    }, 100);
+    console.log('🎯 New selection:', newSelection);
+    console.log('🎯 Available events:', data?.recentEvents?.length || 0);
+    
+    if (newSelection) {
+      const filtered = data?.recentEvents?.filter(event => event.currency === newSelection) || [];
+      console.log('🎯 Filtered events for', newSelection, ':', filtered.length);
+      console.log('🎯 Sample filtered events:', filtered.slice(0, 3));
+    }
   };
 
   // Filter events by selected currency
   const getFilteredEvents = (): EconomicEvent[] => {
-    if (!selectedCurrency || !data?.recentEvents) return [];
+    console.log('🔍 getFilteredEvents called with selectedCurrency:', selectedCurrency);
+    if (!selectedCurrency || !data?.recentEvents) {
+      console.log('🔍 No currency selected or no data, returning empty array');
+      return [];
+    }
     const filtered = data.recentEvents.filter(event => event.currency === selectedCurrency);
-    console.log(`Filtering events for ${selectedCurrency}:`, {
-      totalEvents: data.recentEvents.length,
-      filteredEvents: filtered.length,
-      selectedCurrency,
-      events: filtered
-    });
+    console.log('🔍 Filtered events count:', filtered.length);
     return filtered;
   };
 
   // Get all events (either filtered or all)
   const getDisplayEvents = (): EconomicEvent[] => {
-    const events = selectedCurrency ? getFilteredEvents() : data?.recentEvents || [];
-    console.log('getDisplayEvents called:', {
-      selectedCurrency,
-      totalEvents: data?.recentEvents?.length || 0,
-      displayEvents: events.length,
-      events: events
-    });
+    const events = selectedCurrency ? getFilteredEvents() : (data?.recentEvents || []);
+    console.log('🔍 getDisplayEvents returning:', events.length, 'events');
     return events;
   };
 
@@ -140,6 +135,9 @@ const Dashboard: React.FC = () => {
     return breakdown;
   };
 
+  const selectedSentiment = getSelectedCurrencySentiment();
+  const sentimentBreakdown = getSentimentBreakdown();
+
   if (loading) {
     return (
       <div className="dashboard-loading">
@@ -152,71 +150,62 @@ const Dashboard: React.FC = () => {
   if (error) {
     return (
       <div className="dashboard-error">
-        <h2>Error loading dashboard</h2>
+        <h2>Error Loading Dashboard</h2>
         <p>{error}</p>
-        <button onClick={() => dispatch(fetchDashboardData())}>
-          Retry
-        </button>
+        <button onClick={() => dispatch(fetchDashboardData())}>Retry</button>
       </div>
     );
   }
 
   if (!data) {
-    return <div>No data available</div>;
+    return (
+      <div className="dashboard-no-data">
+        <h2>No Dashboard Data Available</h2>
+        <p>Please check your connection and try again.</p>
+      </div>
+    );
   }
-
-  const selectedSentiment = getSelectedCurrencySentiment();
-  const sentimentBreakdown = getSentimentBreakdown();
 
   return (
     <div className="dashboard">
       <header className="dashboard-header">
         <h1>Forex Fundamental Dashboard</h1>
-        <div className="dashboard-stats">
-          <span className="stat-item">
-            <span className="stat-label">Market Status:</span>
-            <span className="stat-value">{data.marketStatus}</span>
-          </span>
-          <span className="stat-item">
-            <span className="stat-label">Active Alerts:</span>
-            <span className="stat-value">{data.activeAlerts}</span>
-          </span>
-          <span className="stat-item">
-            <span className="stat-label">Last Updated:</span>
-            <span className="stat-value">{new Date().toLocaleTimeString()}</span>
-          </span>
-        </div>
-        
-        <div className="view-selector">
+        <div className="header-actions">
           <button 
-            className={`view-button ${activeView === 'overview' ? 'active' : ''}`}
+            className={`nav-btn ${activeView === 'overview' ? 'active' : ''}`}
             onClick={() => setActiveView('overview')}
           >
             📊 Overview
           </button>
           <button 
-            className={`view-button ${activeView === 'comprehensive' ? 'active' : ''}`}
+            className={`nav-btn ${activeView === 'comprehensive' ? 'active' : ''}`}
             onClick={() => setActiveView('comprehensive')}
           >
-            📈 All Data
+            📈 Comprehensive View
           </button>
           <button 
-            className={`view-button ${activeView === 'algorithm' ? 'active' : ''}`}
+            className={`nav-btn ${activeView === 'scorecard' ? 'active' : ''}`}
+            onClick={() => setActiveView('scorecard')}
+          >
+            🎯 Scorecard
+          </button>
+          <button 
+            className={`nav-btn ${activeView === 'algorithm' ? 'active' : ''}`}
             onClick={() => setActiveView('algorithm')}
           >
-            🧠 Algorithm
+            🧠 Algorithm Info
           </button>
           <button 
-            className={`view-button ${activeView === 'manage' ? 'active' : ''}`}
+            className={`nav-btn ${activeView === 'manage' ? 'active' : ''}`}
             onClick={() => setActiveView('manage')}
           >
-            🗂️ Manage
+            ⚙️ Manage Events
           </button>
           <button 
-            className="view-button add-news-button"
+            className="add-news-btn"
             onClick={() => setShowAddNewsForm(true)}
           >
-            ➕ Add News
+            📰 Add News
           </button>
         </div>
       </header>
@@ -224,6 +213,31 @@ const Dashboard: React.FC = () => {
       <main className="dashboard-main">
         {activeView === 'overview' && (
           <>
+            {/* Instructions Section */}
+            <section className="instructions-section">
+              <div className="instructions-content">
+                <h3>🎯 How to Use Currency Filtering</h3>
+                <p>
+                  <strong>Click on any currency card below</strong> to filter and view all news & events related to that specific currency. 
+                  The selected currency will show detailed sentiment analysis and filtered events below.
+                </p>
+                <div className="instruction-steps">
+                  <div className="step">
+                    <span className="step-number">1</span>
+                    <span>Click a currency card to select it</span>
+                  </div>
+                  <div className="step">
+                    <span className="step-number">2</span>
+                    <span>View detailed analysis and filtered news</span>
+                  </div>
+                  <div className="step">
+                    <span className="step-number">3</span>
+                    <span>Click again or use "Clear Filter" to reset</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
             <section className="currency-grid">
               <h2>Currency Sentiments</h2>
               <div className="currency-cards">
@@ -329,6 +343,9 @@ const Dashboard: React.FC = () => {
               </section>
             )}
 
+            {/* MT5 News Widget - Shows today's real-time news */}
+            <MT5NewsWidget />
+            
             <section className="recent-events">
               <div className="events-header">
                 <h2>
@@ -348,19 +365,6 @@ const Dashboard: React.FC = () => {
                 </h2>
               </div>
               
-              {/* Debug Information */}
-              <div className="debug-info" style={{ background: '#f0f0f0', padding: '10px', margin: '10px 0', borderRadius: '5px', fontSize: '12px' }}>
-                <strong>Debug Info:</strong><br/>
-                Selected Currency: <span style={{color: 'red', fontWeight: 'bold'}}>{selectedCurrency || 'None'}</span><br/>
-                Total Events: {data?.recentEvents?.length || 0}<br/>
-                Filtered Events: {getFilteredEvents().length}<br/>
-                Display Events: {getDisplayEvents().length}<br/>
-                Sample Event Currencies: {data?.recentEvents?.slice(0, 5).map(e => e.currency).join(', ') || 'None'}<br/>
-                <strong>State Debug:</strong> selectedCurrency = "{selectedCurrency}"<br/>
-                <strong>Events Being Displayed:</strong> {getDisplayEvents().length} events<br/>
-                <strong>First Few Display Events:</strong> {getDisplayEvents().slice(0, 3).map(e => `${e.currency}:${e.title.substring(0, 20)}`).join(' | ')}
-              </div>
-              
               {!selectedCurrency && (
                 <div className="events-help">
                   <p>💡 <strong>Tip:</strong> Click on any currency card above to filter events and see detailed analysis for that currency.</p>
@@ -377,6 +381,54 @@ const Dashboard: React.FC = () => {
 
         {activeView === 'comprehensive' && (
           <ComprehensiveEventView events={data.recentEvents} />
+        )}
+
+        {activeView === 'scorecard' && (
+          <div className="scorecard-view">
+            <h2>🎯 Currency Bias Scorecard</h2>
+            <p>Advanced analysis of currency bias across multiple economic pillars.</p>
+            <div className="scorecard-grid">
+              {data.currencySentiments.map((sentiment) => (
+                <div key={sentiment.currency} className="scorecard-card">
+                  <h3>{sentiment.currency}</h3>
+                  <div className="scorecard-content">
+                    <div className="bias-indicator">
+                      <span className="bias-label">Bias:</span>
+                      <span className={`bias-value bias-${sentiment.currentSentiment.toLowerCase()}`}>
+                        {sentiment.currentSentiment}
+                      </span>
+                    </div>
+                    <div className="confidence-indicator">
+                      <span className="confidence-label">Confidence:</span>
+                      <span className="confidence-value">{sentiment.confidenceScore}%</span>
+                    </div>
+                    <div className="trend-indicator">
+                      <span className="trend-label">Trend:</span>
+                      <span className={`trend-value trend-${sentiment.trend.toLowerCase()}`}>
+                        {sentiment.trend}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="scorecard-info">
+              <h4>About the Scorecard</h4>
+              <p>The Currency Bias Scorecard analyzes multiple economic pillars including:</p>
+              <ul>
+                <li><strong>Policy (25%):</strong> Central bank decisions and monetary policy</li>
+                <li><strong>Inflation (15%):</strong> Price stability and inflation trends</li>
+                <li><strong>Growth (15%):</strong> Economic growth and GDP indicators</li>
+                <li><strong>Labor (5%):</strong> Employment and wage data</li>
+                <li><strong>External (10%):</strong> Trade balance and external factors</li>
+                <li><strong>Terms of Trade (10%):</strong> Export/import price ratios</li>
+                <li><strong>Fiscal (7.5%):</strong> Government spending and taxation</li>
+                <li><strong>Politics (5%):</strong> Political stability and policy changes</li>
+                <li><strong>Financial Conditions (5%):</strong> Market liquidity and credit</li>
+                <li><strong>Valuation (7.5%):</strong> Currency valuation metrics</li>
+              </ul>
+            </div>
+          </div>
         )}
 
         {activeView === 'algorithm' && (

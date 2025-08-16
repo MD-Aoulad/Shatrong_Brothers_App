@@ -1,273 +1,183 @@
-# 🚀 Forex Fundamental Data App
+# 🚀 Forex Fundamental Dashboard
 
-A comprehensive microservices-based application for analyzing Forex market fundamentals, sentiment analysis, and economic event tracking.
+A comprehensive Forex trading application with real-time economic data, sentiment analysis, and **MetaTrader 5 integration** for live market data.
 
-## 🌟 Features
+## ✨ **Key Features**
 
-- **Real-time Currency Sentiment Analysis** - Track EUR, USD, JPY, GBP, and CAD
-- **Economic Event Monitoring** - CPI, GDP, Interest Rates, Employment, Retail Sales
-- **Advanced Sentiment Analysis** - AI-powered market sentiment evaluation
-- **Interactive Dashboard** - Real-time data visualization and filtering
-- **Multi-Currency Support** - Comprehensive coverage of major Forex pairs
-- **Event Timeline** - Historical and upcoming economic events
-- **Responsive Design** - Works on desktop, tablet, and mobile devices
+- 📊 **Real-time Economic Calendar** - Live economic events and indicators
+- 🧠 **AI-Powered Sentiment Analysis** - Advanced market sentiment calculation
+- 💰 **Currency Sentiment Tracking** - Real-time currency strength analysis
+- 📰 **Live News Integration** - Breaking news and market updates
+- 🔌 **MetaTrader 5 Integration** - Direct access to MT5 economic calendar and news
+- 📈 **Interactive Dashboard** - Filter events by currency and impact
+- 🎯 **Event Management** - Add, edit, and manage economic events
+- 📱 **Responsive Design** - Works on desktop and mobile devices
 
-## 🏗️ Architecture
+## 🆕 **NEW: MetaTrader 5 Integration**
 
-### Microservices Architecture
-- **Frontend** - React.js with TypeScript
-- **API Gateway** - Express.js with Redis caching
-- **Backend** - Core business logic and bias calculation
-- **Data Collection** - Automated economic data gathering
-- **Data Processing** - Event processing and sentiment analysis
-- **Analytics** - Performance metrics and backtesting
-- **WebSocket** - Real-time data streaming
-- **Database** - PostgreSQL for structured data
-- **Cache** - Redis for high-performance caching
-- **Message Queue** - Kafka for event streaming
-- **Time-Series DB** - InfluxDB for market data
+**Get real-time data directly from MT5!** 🎉
 
-### Technology Stack
-- **Frontend**: React 18, TypeScript, Redux Toolkit, CSS3
-- **Backend**: Node.js, Express.js, TypeScript
-- **Database**: PostgreSQL 15, Redis 7, InfluxDB 2.7
-- **Message Queue**: Apache Kafka 7.4.0
-- **Containerization**: Docker, Docker Compose
-- **Orchestration**: Kubernetes (optional)
+- **Economic Calendar**: Live NFP, Fed decisions, CPI data, GDP reports
+- **News Feed**: Official MT5 news and market commentary
+- **Market Sentiment**: Real-time currency pair analysis
+- **No API Limits**: Direct MT5 connection, no rate limiting
+- **Fallback Support**: Automatic fallback to other sources if MT5 unavailable
 
-## 🚀 Quick Start
+[📖 **MT5 Integration Guide**](MT5_INTEGRATION_GUIDE.md) - Complete setup instructions
+
+## 🏗️ **Architecture**
+
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   Frontend      │    │   API Gateway    │    │   Database      │
+│   (React)       │◄──►│   (Express)      │◄──►│   (PostgreSQL)  │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+         │                       │                       │
+         │              ┌──────────────────┐             │
+         │              │   Data Collection│             │
+         │              │   (MT5 + APIs)   │             │
+         │              └──────────────────┘             │
+         │                       │                       │
+         │              ┌──────────────────┐             │
+         │              │   Analytics      │             │
+         │              │   Service        │             │
+         │              └──────────────────┘             │
+         │                       │                       │
+         │              ┌──────────────────┐             │
+         │              │   WebSocket      │             │
+         │              │   Service        │             │
+         │              └──────────────────┘             │
+         └───────────────┴──────────────────┴─────────────┘
+```
+
+## 🚀 **Quick Start**
 
 ### Prerequisites
 - Docker and Docker Compose
-- Node.js 18+ (for local development)
-- Git
+- MetaAPI.cloud account (for MT5 integration)
 
-### 1. Clone the Repository
+### 1. Clone and Setup
 ```bash
-git clone <your-repo-url>
+git clone <your-repo>
 cd Shatrong_App
 ```
 
-### 2. Start the Application
+### 2. Configure MT5 Integration (Optional but Recommended)
 ```bash
-# Start all services
-docker-compose up -d
+# Copy environment template
+cp data-collection/env.example data-collection/.env
 
-# Or start specific services
-docker-compose up frontend api-gateway postgres redis -d
+# Edit and add your MetaAPI token
+META_API_TOKEN=your_token_here
 ```
 
-### 3. Access the Application
+### 3. Start Services
+```bash
+docker-compose up -d
+```
+
+### 4. Access Dashboard
 - **Frontend**: http://localhost:3000
 - **API Gateway**: http://localhost:8000
-- **Backend**: http://localhost:8080
-- **WebSocket**: ws://localhost:8001
 - **Database**: localhost:5432
-- **Redis**: localhost:6379
-- **Kafka**: localhost:29092
-- **InfluxDB**: localhost:8086
 
-## 📁 Project Structure
+## 📊 **Data Sources**
 
-```
-Shatrong_App/
-├── frontend/                 # React frontend application
-├── api-gateway/             # API gateway with caching
-├── backend/                 # Core backend services
-├── data-collection/         # Economic data collection
-├── data-processing/         # Data processing pipeline
-├── analytics/               # Analytics and reporting
-├── websocket/               # Real-time data streaming
-├── database/                # Database initialization scripts
-├── k8s/                     # Kubernetes deployment files
-├── docker-compose.yml       # Docker services configuration
-├── start.sh                 # Quick start script
-└── docs/                    # Project documentation
-```
+### Primary Source: MetaTrader 5
+- **Economic Calendar**: Live economic events
+- **News Feed**: Official MT5 news
+- **Market Data**: Real-time prices and sentiment
 
-## 🔧 Development
+### Fallback Sources
+- **Trading Economics**: Economic calendar API
+- **Alpha Vantage**: US economic indicators
+- **FRED**: Federal Reserve economic data
+- **NewsAPI**: Financial news sentiment
 
-### Local Development Setup
+## 🔧 **Configuration**
+
+### Environment Variables
 ```bash
-# Install dependencies for each service
-cd frontend && npm install
-cd ../api-gateway && npm install
-cd ../backend && npm install
+# MT5 Integration (Primary)
+META_API_TOKEN=your_meta_api_token
 
-# Start development servers
-npm run dev  # In each service directory
+# Fallback APIs (Optional)
+ALPHA_VANTAGE_API_KEY=your_key
+FRED_API_KEY=your_key
+NEWS_API_KEY=your_key
+
+# Database
+DATABASE_URL=postgresql://user:pass@host:port/db
+REDIS_URL=redis://localhost:6379
 ```
 
-### Docker Development
-```bash
-# Rebuild and restart services
-docker-compose up --build -d
+## 📱 **Features Overview**
 
-# View logs
-docker-compose logs -f frontend
-docker-compose logs -f api-gateway
-
-# Access service containers
-docker-compose exec frontend sh
-docker-compose exec postgres psql -U postgres -d forex_app
-```
-
-### Database Management
-```bash
-# Access PostgreSQL
-docker-compose exec postgres psql -U postgres -d forex_app
-
-# View tables
-\dt
-
-# Sample queries
-SELECT * FROM economic_events LIMIT 5;
-SELECT * FROM currency_sentiments;
-```
-
-## 📊 Data Sources
-
-### Economic Indicators
-- **CPI (Consumer Price Index)** - Monthly inflation data
-- **GDP (Gross Domestic Product)** - Quarterly growth data
-- **Interest Rates** - Central bank decisions
-- **Employment Data** - NFP, unemployment rates
-- **Retail Sales** - Consumer spending indicators
-
-### Supported Currencies
-- **EUR** - Euro (Eurozone)
-- **USD** - US Dollar (United States)
-- **JPY** - Japanese Yen (Japan)
-- **GBP** - British Pound (United Kingdom)
-- **CAD** - Canadian Dollar (Canada)
-
-## 🎯 Key Features
-
-### Currency Sentiment Analysis
-- Real-time sentiment scoring
-- Confidence level indicators
-- Trend analysis (Strengthening/Weakening/Stable)
-- Historical sentiment tracking
+### Dashboard
+- **Currency Cards**: Click to filter events by currency
+- **Event Timeline**: Chronological view of economic events
+- **Sentiment Analysis**: AI-powered market sentiment
+- **Real-time Updates**: Live data every 5 minutes
 
 ### Event Management
-- Add custom economic events
-- Edit and delete events
-- Impact level classification
-- Sentiment analysis integration
+- **Add News**: Manual event entry with templates
+- **Edit Events**: Update existing event details
+- **Event Filtering**: Filter by currency, impact, sentiment
+- **Bulk Operations**: Manage multiple events
 
-### Dashboard Features
-- Currency filtering and selection
-- Event timeline visualization
-- Sentiment breakdown charts
-- Market status indicators
+### Analytics
+- **Sentiment Trends**: Historical sentiment analysis
+- **Impact Analysis**: Event impact on currency pairs
+- **Performance Metrics**: Trading strategy backtesting
+- **Correlation Analysis**: Currency pair relationships
 
-## 🔒 Security Features
+## 🧪 **Testing**
 
-- JWT-based authentication
-- API rate limiting
-- Input validation and sanitization
-- Secure database connections
-- Environment variable protection
-
-## 📈 Performance Features
-
-- Redis caching layer
-- Database query optimization
-- Efficient data pagination
-- Real-time data streaming
-- Responsive UI components
-
-## 🧪 Testing
-
-### Running Tests
+### Test MT5 Integration
 ```bash
-# Frontend tests
-cd frontend && npm test
+# Check data collection logs
+docker-compose logs data-collection
 
-# Backend tests
-cd backend && npm test
-
-# Integration tests
-npm run test:integration
+# Look for MT5 connection success
+🔌 Connecting to MetaTrader 5...
+✅ Connected to MT5 account: [account_id]
+📊 MT5: X calendar events + Y news items
 ```
 
-### Test Coverage
-- Unit tests for all services
-- Integration tests for APIs
-- End-to-end testing
-- Performance testing
+### Test Dashboard
+1. Open http://localhost:3000
+2. Click on currency cards to filter events
+3. Add new events via "Add News" button
+4. Check real-time updates
 
-## 🚀 Deployment
+## 📚 **Documentation**
 
-### Production Deployment
-```bash
-# Build production images
-docker-compose -f docker-compose.prod.yml build
+- [📖 **MT5 Integration Guide**](MT5_INTEGRATION_GUIDE.md) - Complete MT5 setup
+- [🔧 **Technical Specification**](TECHNICAL_SPECIFICATION.md) - System architecture
+- [🎨 **UI/UX Design**](UI_UX_DESIGN.md) - Design principles
+- [📊 **Project Documentation**](PROJECT_DOCUMENTATION.md) - Project overview
 
-# Deploy to production
-docker-compose -f docker-compose.prod.yml up -d
-```
-
-### Kubernetes Deployment
-```bash
-# Apply Kubernetes manifests
-kubectl apply -f k8s/
-
-# Check deployment status
-kubectl get pods
-kubectl get services
-```
-
-## 📝 API Documentation
-
-### Endpoints
-- `GET /api/v1/dashboard` - Dashboard data
-- `GET /api/v1/events` - Economic events
-- `GET /api/v1/sentiment/:currency` - Currency sentiment
-- `POST /api/v1/events` - Create new event
-- `PUT /api/v1/events/:id` - Update event
-- `DELETE /api/v1/events/:id` - Delete event
-
-### WebSocket Events
-- `currency_update` - Real-time currency updates
-- `event_added` - New economic events
-- `sentiment_change` - Sentiment updates
-
-## 🤝 Contributing
+## 🤝 **Contributing**
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
 
-## 📄 License
+## 📄 **License**
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the LICENSE file for details.
 
-## 🆘 Support
+## 🆘 **Support**
 
-- **Documentation**: [PROJECT_DOCUMENTATION.md](PROJECT_DOCUMENTATION.md)
-- **Technical Specs**: [TECHNICAL_SPECIFICATION.md](TECHNICAL_SPECIFICATION.md)
-- **UI/UX Design**: [UI_UX_DESIGN.md](UI_UX_DESIGN.md)
-- **Issues**: Create an issue in the repository
-
-## 🗺️ Roadmap
-
-- [ ] Mobile app (React Native)
-- [ ] Advanced charting (TradingView integration)
-- [ ] Machine learning sentiment analysis
-- [ ] Real-time news integration
-- [ ] Social trading features
-- [ ] Advanced risk management tools
-
-## 📊 Project Status
-
-- **Current Version**: 1.0.0
-- **Development Status**: Active Development
-- **Last Updated**: December 2024
-- **Next Release**: Q1 2025
+- **Issues**: Create a GitHub issue
+- **MT5 Setup**: Check [MT5 Integration Guide](MT5_INTEGRATION_GUIDE.md)
+- **Documentation**: Review project docs
+- **Community**: Join our discussions
 
 ---
 
-**Built with ❤️ for the Forex trading community**
+**🚀 Ready to trade with real-time MT5 data? Get started now!**
+
+*Last Updated: $(date)*

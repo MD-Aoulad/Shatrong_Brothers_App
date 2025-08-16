@@ -42,13 +42,11 @@ log_error() {
 
 # 1. Backup source code
 echo -e "${BLUE}📦 Backing up source code...${NC}"
-cd ../..
-cp -r "${PROJECT_NAME}" "source_code_backup"
+cp -r . "source_code_backup"
 log_message "Source code backed up"
 
 # 2. Backup Docker images
 echo -e "${BLUE}🐳 Backing up Docker images...${NC}"
-cd "${PROJECT_NAME}"
 
 # Save Docker images
 docker save -o "frontend_image.tar" $(docker-compose images -q frontend) 2>/dev/null || log_warning "Frontend image not found"
@@ -87,6 +85,7 @@ log_message "Configuration files backed up"
 
 # 5. Backup documentation
 echo -e "${BLUE}📚 Backing up documentation...${NC}"
+mkdir -p "docs_backup"
 find . -name "*.md" -exec cp {} "docs_backup/" \; 2>/dev/null || log_warning "No markdown files found"
 log_message "Documentation backed up"
 
@@ -149,7 +148,6 @@ log_message "Compressed archive created: ${BACKUP_NAME}.tar.gz"
 # 8. Clean up temporary files
 echo -e "${BLUE}🧹 Cleaning up temporary files...${NC}"
 rm -rf "${BACKUP_NAME}"
-cd "${PROJECT_NAME}"
 rm -rf "source_code_backup"
 rm -f *.tar
 rm -f *.backup

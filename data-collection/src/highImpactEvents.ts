@@ -430,7 +430,7 @@ function generateHighImpactDemoEvents(): EconomicEvent[] {
     previousValue: 220000,
     impact: 'HIGH',
     sentiment: Math.random() > 0.5 ? 'BEARISH' : 'BULLISH',
-    confidenceScore: 85 + Math.random() * 10,
+          confidenceScore: Math.round(85 + Math.random() * 10),
     priceImpact: (Math.random() - 0.5) * 2,
     source: 'Demo High-Impact Source'
   });
@@ -598,14 +598,14 @@ function calculateSentimentFromValues(actual?: number, forecast?: number, previo
 
 function calculateConfidenceFromImportance(importance: string | number): number {
   if (typeof importance === 'string') {
-    if (importance.toLowerCase() === 'high' || importance === '3') return 85 + Math.random() * 10;
-    if (importance.toLowerCase() === 'medium' || importance === '2') return 65 + Math.random() * 15;
+    if (importance.toLowerCase() === 'high' || importance === '3') return Math.round(85 + Math.random() * 10);
+    if (importance.toLowerCase() === 'medium' || importance === '2') return Math.round(65 + Math.random() * 15);
   }
   if (typeof importance === 'number') {
-    if (importance >= 3) return 85 + Math.random() * 10;
-    if (importance >= 2) return 65 + Math.random() * 15;
+    if (importance >= 3) return Math.round(85 + Math.random() * 10);
+    if (importance >= 2) return Math.round(65 + Math.random() * 15);
   }
-  return 45 + Math.random() * 15;
+  return Math.round(45 + Math.random() * 15);
 }
 
 function estimatePriceImpact(eventName: string, actual?: number, forecast?: number): number {
