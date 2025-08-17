@@ -37,14 +37,28 @@ const EventTimeline: React.FC<EventTimelineProps> = ({ events, showCurrency = tr
   const formatDate = (date: Date) => {
     const now = new Date();
     const eventDate = new Date(date);
-    const diffInHours = Math.floor((now.getTime() - eventDate.getTime()) / (1000 * 60 * 60));
+    const diffInMs = now.getTime() - eventDate.getTime();
+    const diffInMinutes = Math.floor(diffInMs / (1000 * 60));
+    const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60));
+    const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
     
-    if (diffInHours < 1) {
+    if (diffInMinutes < 1) {
       return 'Just now';
+    } else if (diffInMinutes < 60) {
+      return `${diffInMinutes} minute${diffInMinutes > 1 ? 's' : ''} ago`;
     } else if (diffInHours < 24) {
       return `${diffInHours} hour${diffInHours > 1 ? 's' : ''} ago`;
+    } else if (diffInDays < 7) {
+      return `${diffInDays} day${diffInDays > 1 ? 's' : ''} ago`;
     } else {
-      return eventDate.toLocaleDateString();
+      // Show full date for older events
+      return eventDate.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
     }
   };
 
@@ -99,7 +113,17 @@ const EventTimeline: React.FC<EventTimelineProps> = ({ events, showCurrency = tr
                   </div>
                 </div>
                 <div className="event-footer">
-                  <span className="event-time">{formatDate(event.date)}</span>
+                  <div className="event-time-info">
+                    <span className="event-time">{formatDate(event.date)}</span>
+                    <span className="event-actual-date">
+                      {new Date(event.date).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </span>
+                  </div>
                   <span className="event-source">{event.source}</span>
                 </div>
               </div>

@@ -1,83 +1,86 @@
-import { MT5Connector } from './mt5Connector';
+import { initializeMT5Connection, isMT5Connected, getHistoricalPrices, getLivePrices, getEconomicCalendar, getMarketSentiment } from './mt5Connector';
 
 /**
- * Standalone MT5 Test - Bypasses all problematic data collection
- * This will directly provide today's news data
+ * Standalone MT5 Test - Tests real MT5 connection and data
+ * This requires valid API credentials to function
  */
 export async function testMT5Connector() {
-  console.log('🧪 Starting standalone MT5 test...');
+  console.log('🧪 Starting MT5 connection test...');
   
   try {
-    // Initialize MT5 connector
-    const mt5Connector = new MT5Connector();
+    // Test MT5 connection
+    const isConnected = await initializeMT5Connection();
     
-    // Connect to MT5 (will use demo mode)
-    console.log('🔌 Connecting to MT5...');
-    const connected = await mt5Connector.connect();
-    
-    if (connected) {
-      console.log('✅ MT5 connected successfully!');
+    if (isConnected) {
+      console.log('✅ MT5 connection test successful');
       
-      // Get today's news
-      console.log('📰 Fetching today\'s news from MT5...');
-      const todayNews = await mt5Connector.getNewsData();
-      
-      console.log(`📊 MT5 News Results:`);
-      console.log(`   • Total news events: ${todayNews.length}`);
-      
-      todayNews.forEach((news, index) => {
-        console.log(`   • News ${index + 1}: ${news.title}`);
-        console.log(`     Currency: ${news.currency}`);
-        console.log(`     Impact: ${news.impact}`);
-        console.log(`     Sentiment: ${news.sentiment}`);
-        console.log(`     Time: ${news.eventDate.toLocaleTimeString()}`);
-        console.log(`     Source: ${news.source}`);
-        console.log('');
-      });
-      
-      // Get economic calendar
-      console.log('📅 Fetching economic calendar...');
+      // Test economic calendar
       const startDate = new Date();
-      const endDate = new Date();
-      endDate.setDate(endDate.getDate() + 7);
+      const endDate = new Date(startDate.getTime() + 7 * 24 * 60 * 60 * 1000); // Next 7 days
+      try {
+        const calendar = await getEconomicCalendar(startDate, endDate);
+        console.log(`📅 MT5 Calendar: ${calendar.length} events found`);
+      } catch (error) {
+        console.log('📅 MT5 Calendar: No events available (requires real data source)');
+      }
       
-      const calendarEvents = await mt5Connector.getEconomicCalendar(startDate, endDate);
-      console.log(`   • Calendar events: ${calendarEvents.length}`);
+      // Test live prices
+      try {
+        const symbols = ['EUR/USD', 'GBP/USD', 'USD/JPY'];
+        const prices = await getLivePrices(symbols);
+        console.log(`📈 MT5 Live Prices: ${prices.length} symbols found`);
+      } catch (error) {
+        console.log('📈 MT5 Live Prices: No prices available');
+      }
       
-      // Get market sentiment
-      console.log('📈 Fetching market sentiment...');
-      const sentiment = await mt5Connector.getMarketSentiment();
-      console.log(`   • Market sentiment data:`, sentiment);
+      // Test market sentiment
+      try {
+        const symbols = ['EUR/USD', 'GBP/USD', 'USD/JPY'];
+        const sentiment = await getMarketSentiment(symbols);
+        console.log(`🧠 MT5 Sentiment: ${sentiment.length} symbols analyzed`);
+      } catch (error) {
+        console.log('🧠 MT5 Sentiment: No sentiment data available');
+      }
+      
+      // Test historical prices
+      try {
+        const endDate = new Date();
+        const startDate = new Date(endDate.getTime() - 24 * 60 * 60 * 1000); // Last 24 hours
+        const historical = await getHistoricalPrices('EUR/USD', startDate, endDate, 'H1');
+        console.log(`📊 MT5 Historical: ${historical.length} H1 bars found for EUR/USD`);
+      } catch (error) {
+        console.log('📊 MT5 Historical: No historical data available');
+      }
       
       return {
         success: true,
-        newsCount: todayNews.length,
-        calendarCount: calendarEvents.length,
-        sentiment: sentiment,
-        news: todayNews,
-        calendar: calendarEvents
+        message: 'MT5 connection successful - real data available'
       };
       
     } else {
-      console.log('❌ MT5 connection failed');
-      return { success: false, error: 'MT5 connection failed' };
+      console.log('❌ MT5 connection test failed - requires valid API credentials');
+      return { 
+        success: false, 
+        error: 'MT5 connection failed - requires valid API credentials',
+        instructions: 'Please set METAAPI_TOKEN and METAAPI_ACCOUNT_ID in your .env file'
+      };
     }
     
   } catch (error) {
     console.error('❌ MT5 test error:', error);
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error occurred' };
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+      instructions: 'Check your API credentials and network connection'
+    };
   }
 }
 
 /**
- * Direct function to get today's news for immediate use
+ * Check MT5 connection status
  */
-export async function getTodayNews() {
-  const result = await testMT5Connector();
-  if (result.success) {
-    return result.news;
-  }
-  return [];
+export function checkMT5Status(): boolean {
+  return isMT5Connected();
 }
 
 // Export for testing

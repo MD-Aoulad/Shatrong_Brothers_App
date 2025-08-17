@@ -40,6 +40,11 @@ CREATE TABLE IF NOT EXISTS economic_events (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Add unique constraint to prevent duplicate events
+ALTER TABLE economic_events 
+ADD CONSTRAINT unique_event_title_currency_date 
+UNIQUE (title, currency, event_date);
+
 -- Currency sentiments table
 CREATE TABLE IF NOT EXISTS currency_sentiments (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

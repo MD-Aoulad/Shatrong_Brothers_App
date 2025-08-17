@@ -1,571 +1,317 @@
 import MetaApi from 'metaapi.cloud-sdk';
 import { EconomicEvent } from './dataSources';
 
-export interface MT5EconomicEvent {
-  id: string;
-  currency: string;
-  eventType: string;
-  title: string;
-  description: string;
-  eventDate: Date;
-  actualValue?: number;
-  expectedValue?: number;
-  previousValue?: number;
-  impact: 'HIGH' | 'MEDIUM' | 'LOW';
-  sentiment: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
-  confidenceScore: number;
-  priceImpact?: number;
-  source: string;
-  url?: string;
-}
+let connection: any = null;
+let websocketClient: any = null;
+let isConnected = false;
 
-export class MT5Connector {
-  private metaApi: MetaApi;
-  private accountId?: string;
-  private isConnected: boolean = false;
-
-  constructor() {
-    // Initialize MetaAPI.cloud SDK
-    this.metaApi = new MetaApi(process.env.META_API_TOKEN || '');
-  }
-
-  /**
-   * Connect to MT5 account
-   */
-  async connect(): Promise<boolean> {
-    try {
-      console.log('🔌 Connecting to MetaTrader 5...');
-      
-      // Check if we have a valid API token
-      if (!process.env.META_API_TOKEN || process.env.META_API_TOKEN === 'demo-token-change-in-production') {
-        console.log('⚠️ Using MT5 demo mode (no real API token)');
-        this.isConnected = true; // Allow demo mode
-        return true;
-      }
-      
-      // Get account info
-      const accounts = await this.metaApi.metatraderAccountApi.getAccounts();
-      if (accounts.length === 0) {
-        throw new Error('No MT5 accounts found');
-      }
-
-      // Use first available account
-      this.accountId = accounts[0].id;
-      console.log(`✅ Connected to MT5 account: ${this.accountId}`);
-      
-      this.isConnected = true;
-      return true;
-    } catch (error) {
-      console.error('❌ Failed to connect to MT5:', error);
-      // Fall back to demo mode
-      console.log('⚠️ Falling back to MT5 demo mode');
-      this.isConnected = true;
-      return true;
-    }
-  }
-
-  /**
-   * Get economic calendar data from MT5
-   */
-  async getEconomicCalendar(startDate: Date, endDate: Date): Promise<MT5EconomicEvent[]> {
-    if (!this.isConnected) {
-      throw new Error('Not connected to MT5');
+// Initialize MT5 connection using environment variables
+export async function initializeMT5Connection(): Promise<boolean> {
+  try {
+    const token = process.env.METAAPI_TOKEN;
+    const accountId = process.env.METAAPI_ACCOUNT_ID;
+    
+    if (!token || !accountId) {
+      console.error('❌ MT5 API credentials required!');
+      console.error('Please set METAAPI_TOKEN and METAAPI_ACCOUNT_ID in your .env file');
+      console.error('Get them from: https://app.metaapi.cloud/');
+      return false;
     }
 
-    try {
-      console.log('📅 Fetching economic calendar from MT5...');
-      
-      // Get account connection
-      const account = await this.metaApi.metatraderAccountApi.getAccount(this.accountId!);
-      const connection = await account.getRPCConnection();
-      await connection.waitSynchronized();
-
-      // Create economic calendar events for the date range
-      const calendarEvents: MT5EconomicEvent[] = [];
-      const currentDate = new Date(startDate);
-      
-      while (currentDate <= endDate) {
-        const dayOfWeek = currentDate.getDay();
-        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-        
-        if (!isWeekend) {
-          // Add daily economic events
-          const dailyEvents = [
-            {
-              id: `mt5-calendar-${currentDate.getTime()}-1`,
-              currency: 'USD',
-              eventType: 'EMPLOYMENT',
-              title: 'US Jobless Claims',
-              description: 'Weekly unemployment insurance claims',
-              eventDate: new Date(currentDate.getTime() + 8 * 60 * 60 * 1000), // 8:30 AM
-              impact: 'MEDIUM' as const,
-              sentiment: 'NEUTRAL' as const,
-              confidenceScore: 70,
-              source: 'MT5 - Department of Labor',
-              url: 'https://www.dol.gov'
-            },
-            {
-              id: `mt5-calendar-${currentDate.getTime()}-2`,
-              currency: 'EUR',
-              eventType: 'RETAIL_SALES',
-              title: 'Eurozone Retail Sales',
-              description: 'Monthly retail sales data',
-              eventDate: new Date(currentDate.getTime() + 10 * 60 * 60 * 1000), // 10:00 AM
-              impact: 'MEDIUM' as const,
-              sentiment: 'BULLISH' as const,
-              confidenceScore: 65,
-              source: 'MT5 - Eurostat',
-              url: 'https://ec.europa.eu/eurostat'
-            }
-          ];
-          
-          calendarEvents.push(...dailyEvents);
-        }
-        
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
-      
-      console.log(`📅 MT5: Created ${calendarEvents.length} calendar events for ${startDate.toDateString()} to ${endDate.toDateString()}`);
-      return calendarEvents;
-      
-    } catch (error) {
-      console.error('❌ Error fetching MT5 economic calendar:', error);
-      return [];
-    }
-  }
-
-    /**
-   * Get real-time news data from MT5
-   */
-  async getNewsData(): Promise<MT5EconomicEvent[]> {
-    if (!this.isConnected) {
-      throw new Error('Not connected to MT5');
+    console.log('🔌 Connecting to MT5 via MetaAPI.cloud...');
+    
+    // Initialize MetaAPI connection
+    const api = new MetaApi(token);
+    const account = await api.metatraderAccountApi.getAccount(accountId);
+    
+    if (account.state !== 'DEPLOYED') {
+      console.error('❌ MT5 account not deployed. Please check your account status.');
+      return false;
     }
 
-    try {
-      console.log('📰 Fetching news data from MT5...');
-      
-      // Check if we're in demo mode
-      if (!this.accountId) {
-        console.log('📰 MT5 Demo Mode: Generating today\'s news events...');
-        return this.generateDemoNewsData();
-      }
-      
-      const account = await this.metaApi.metatraderAccountApi.getAccount(this.accountId);
-      const connection = await account.getRPCConnection();
-      await connection.waitSynchronized();
-
-      // Get current market news and economic events for today
-      const newsEvents: MT5EconomicEvent[] = [];
-      
-      // Get current time
-      const now = new Date();
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      
-      // Validate the date is valid
-      if (isNaN(today.getTime())) {
-        console.log('⚠️ Invalid date created, using current time');
-        const today = new Date();
-      }
-      
-      // Create real-time news events for today (these would come from MT5 in production)
-      const todayNews = [
-        {
-          id: `mt5-news-${Date.now()}-1`,
-          currency: 'USD',
-          eventType: 'INTEREST_RATE',
-          title: 'FOMC Meeting Minutes - August 2025',
-          description: 'Federal Reserve releases minutes from the latest FOMC meeting',
-          eventDate: new Date(today.getTime() + 14 * 60 * 60 * 1000), // 2 PM today
-          impact: 'HIGH' as const,
-          sentiment: 'NEUTRAL' as const,
-          confidenceScore: 95,
-          source: 'MT5 - Federal Reserve',
-          url: 'https://www.federalreserve.gov'
-        },
-        {
-          id: `mt5-news-${Date.now()}-2`,
-          currency: 'EUR',
-          eventType: 'CPI',
-          title: 'Eurozone CPI Data - August 2025',
-          description: 'Consumer Price Index data for the Eurozone',
-          eventDate: new Date(today.getTime() + 10 * 60 * 60 * 1000), // 10 AM today
-          impact: 'HIGH' as const,
-          sentiment: 'BULLISH' as const,
-          confidenceScore: 85,
-          source: 'MT5 - Eurostat',
-          url: 'https://ec.europa.eu/eurostat'
-        },
-        {
-          id: `mt5-news-${Date.now()}-3`,
-          currency: 'GBP',
-          eventType: 'EMPLOYMENT',
-          title: 'UK Employment Data - August 2025',
-          description: 'UK employment and unemployment figures',
-          eventDate: new Date(today.getTime() + 9 * 60 * 60 * 1000), // 9 AM today
-          impact: 'MEDIUM' as const,
-          sentiment: 'NEUTRAL' as const,
-          confidenceScore: 75,
-          source: 'MT5 - Office for National Statistics',
-          url: 'https://www.ons.gov.uk'
-        },
-        {
-          id: `mt5-news-${Date.now()}-4`,
-          currency: 'JPY',
-          eventType: 'GDP',
-          title: 'Japan GDP Growth - Q2 2025',
-          description: 'Japan Gross Domestic Product growth rate',
-          eventDate: new Date(today.getTime() + 1 * 60 * 60 * 1000), // 1 AM today
-          impact: 'HIGH' as const,
-          sentiment: 'BULLISH' as const,
-          confidenceScore: 80,
-          source: 'MT5 - Bank of Japan',
-          url: 'https://www.boj.or.jp'
-        }
-      ];
-      
-      console.log(`📰 MT5: Collected ${todayNews.length} news events for today (${today.toDateString()})`);
-      return todayNews;
-      
-    } catch (error) {
-      console.error('❌ Error fetching MT5 news:', error);
-      console.log('📰 MT5 Demo Mode: Falling back to demo news data...');
-      return this.generateDemoNewsData();
-    }
-  }
-
-  /**
-   * Generate demo news data for today
-   */
-  private generateDemoNewsData(): MT5EconomicEvent[] {
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    // Wait for account to be ready
+    await account.waitConnected();
     
-    // Validate the date is valid
-    if (isNaN(today.getTime())) {
-      console.log('⚠️ Invalid date created in demo mode, using current time');
-      const today = new Date();
-    }
+    connection = account;
+    isConnected = true;
     
-    const demoNews = [
-      {
-        id: `mt5-demo-news-${Date.now()}-1`,
-        currency: 'USD',
-        eventType: 'INTEREST_RATE',
-        title: 'FOMC Meeting Minutes - August 2025',
-        description: 'Federal Reserve releases minutes from the latest FOMC meeting',
-        eventDate: new Date(today.getTime() + 14 * 60 * 60 * 1000), // 2 PM today
-        impact: 'HIGH' as const,
-        sentiment: 'NEUTRAL' as const,
-        confidenceScore: 95,
-        source: 'MT5 Demo - Federal Reserve',
-        url: 'https://www.federalreserve.gov'
-      },
-      {
-        id: `mt5-demo-news-${Date.now()}-2`,
-        currency: 'EUR',
-        eventType: 'CPI',
-        title: 'Eurozone CPI Data - August 2025',
-        description: 'Consumer Price Index data for the Eurozone',
-        eventDate: new Date(today.getTime() + 10 * 60 * 60 * 1000), // 10 AM today
-        impact: 'HIGH' as const,
-        sentiment: 'BULLISH' as const,
-        confidenceScore: 85,
-        source: 'MT5 Demo - Eurostat',
-        url: 'https://ec.europa.eu/eurostat'
-      },
-      {
-        id: `mt5-demo-news-${Date.now()}-3`,
-        currency: 'GBP',
-        eventType: 'EMPLOYMENT',
-        title: 'UK Employment Data - August 2025',
-        description: 'UK employment and unemployment figures',
-        eventDate: new Date(today.getTime() + 9 * 60 * 60 * 1000), // 9 AM today
-        impact: 'MEDIUM' as const,
-        sentiment: 'NEUTRAL' as const,
-        confidenceScore: 75,
-        source: 'MT5 Demo - Office for National Statistics',
-        url: 'https://www.ons.gov.uk'
-      },
-      {
-        id: `mt5-demo-news-${Date.now()}-4`,
-        currency: 'JPY',
-        eventType: 'GDP',
-        title: 'Japan GDP Growth - Q2 2025',
-        description: 'Japan Gross Domestic Product growth rate',
-        eventDate: new Date(today.getTime() + 1 * 60 * 60 * 1000), // 1 AM today
-        impact: 'HIGH' as const,
-        sentiment: 'BULLISH' as const,
-        confidenceScore: 80,
-        source: 'MT5 Demo - Bank of Japan',
-        url: 'https://www.boj.or.jp'
-      }
-    ];
+    console.log('✅ Successfully connected to MT5!');
+    console.log(`Account: ${account.id}`);
+    console.log(`Server: ${account.version}`);
+    console.log(`Status: ${account.state}`);
     
-    console.log(`📰 MT5 Demo: Generated ${demoNews.length} news events for today (${today.toDateString()})`);
-    return demoNews;
-  }
-
-  /**
-   * Get market sentiment data from MT5
-   */
-  async getMarketSentiment(): Promise<{ [currency: string]: number }> {
-    if (!this.isConnected) {
-      throw new Error('Not connected to MT5');
-    }
-
-    try {
-      console.log('📈 Fetching market sentiment from MT5...');
-      
-      const account = await this.metaApi.metatraderAccountApi.getAccount(this.accountId!);
-      const connection = await account.getRPCConnection();
-      await connection.waitSynchronized();
-
-      // Get major currency pairs sentiment
-      const majorPairs = ['EURUSD', 'GBPUSD', 'USDJPY', 'USDCHF', 'AUDUSD', 'USDCAD'];
-      const sentiment: { [currency: string]: number } = {};
-
-      for (const pair of majorPairs) {
-        try {
-          // Note: getSymbol method may not exist in current MetaAPI version
-          // const symbol = await connection.getSymbol(pair);
-          // if (symbol) {
-          //   // Calculate sentiment based on price movement and volume
-          //   const sentimentScore = this.calculateSentimentFromSymbol(symbol);
-          //   const baseCurrency = pair.substring(0, 3);
-          //   sentiment[baseCurrency] = sentimentScore;
-          // }
-          console.log(`⚠️ MT5 symbol data not available for ${pair}`);
-        } catch (error) {
-          console.log(`⚠️ Could not get sentiment for ${pair}`);
-        }
-      }
-
-      console.log('✅ Market sentiment data retrieved from MT5');
-      return sentiment;
-    } catch (error) {
-      console.error('❌ Error fetching MT5 market sentiment:', error);
-      return {};
-    }
-  }
-
-  /**
-   * Transform MT5 economic calendar data to our format
-   */
-  private transformMT5Events(mt5Events: any[]): MT5EconomicEvent[] {
-    return mt5Events.map(event => ({
-      id: event.id || `mt5_${Date.now()}_${Math.random()}`,
-      currency: this.mapMT5Currency(event.currency || event.country),
-      eventType: this.mapMT5EventType(event.event || event.title),
-      title: event.event || event.title || 'Economic Event',
-      description: event.description || event.event || 'Economic indicator release',
-      eventDate: new Date(event.time || event.date),
-      actualValue: event.actual ? parseFloat(event.actual) : undefined,
-      expectedValue: event.forecast ? parseFloat(event.forecast) : undefined,
-      previousValue: event.previous ? parseFloat(event.previous) : undefined,
-      impact: this.mapMT5Impact(event.importance || event.impact),
-      sentiment: this.calculateSentiment(event.actual, event.forecast),
-      confidenceScore: this.calculateConfidence(event.importance || event.impact),
-      priceImpact: this.calculatePriceImpact(event.actual, event.forecast),
-      source: 'MetaTrader 5',
-      url: event.url || undefined
-    }));
-  }
-
-  /**
-   * Transform MT5 news data to our format
-   */
-  private transformMT5News(mt5News: any[]): MT5EconomicEvent[] {
-    return mt5News.map(news => ({
-      id: news.id || `mt5_news_${Date.now()}_${Math.random()}`,
-      currency: this.extractCurrencyFromNews(news.title + ' ' + news.body),
-      eventType: 'NEWS',
-      title: news.title || 'News Update',
-      description: news.body || news.title || 'Market news update',
-      eventDate: new Date(news.time || news.date),
-      impact: 'MEDIUM',
-      sentiment: this.analyzeNewsSentiment(news.title + ' ' + news.body),
-      confidenceScore: 60,
-      priceImpact: 0,
-      source: 'MetaTrader 5 News',
-      url: news.url || undefined
-    }));
-  }
-
-  /**
-   * Map MT5 currency codes to our format
-   */
-  private mapMT5Currency(mt5Currency: string): string {
-    const currencyMap: { [key: string]: string } = {
-      'USD': 'USD',
-      'EUR': 'EUR',
-      'JPY': 'JPY',
-      'GBP': 'GBP',
-      'CHF': 'CHF',
-      'AUD': 'AUD',
-      'CAD': 'CAD',
-      'NZD': 'NZD',
-      'US': 'USD',
-      'EU': 'EUR',
-      'JP': 'JPY',
-      'UK': 'GBP'
-    };
-
-    return currencyMap[mt5Currency] || 'USD';
-  }
-
-  /**
-   * Map MT5 event types to our format
-   */
-  private mapMT5EventType(mt5EventType: string): string {
-    const eventTypeMap: { [key: string]: string } = {
-      'NFP': 'EMPLOYMENT',
-      'Non-Farm Payrolls': 'EMPLOYMENT',
-      'Employment': 'EMPLOYMENT',
-      'Unemployment': 'EMPLOYMENT',
-      'Interest Rate': 'INTEREST_RATE',
-      'Rate Decision': 'INTEREST_RATE',
-      'CPI': 'CPI',
-      'Inflation': 'CPI',
-      'GDP': 'GDP',
-      'Growth': 'GDP',
-      'PMI': 'PMI',
-      'Retail Sales': 'RETAIL_SALES',
-      'Trade Balance': 'TRADE'
-    };
-
-    for (const [key, value] of Object.entries(eventTypeMap)) {
-      if (mt5EventType.includes(key)) {
-        return value;
-      }
-    }
-
-    return 'ECONOMIC';
-  }
-
-  /**
-   * Map MT5 impact levels to our format
-   */
-  private mapMT5Impact(mt5Impact: string | number): 'HIGH' | 'MEDIUM' | 'LOW' {
-    if (typeof mt5Impact === 'number') {
-      if (mt5Impact >= 3) return 'HIGH';
-      if (mt5Impact >= 2) return 'MEDIUM';
-      return 'LOW';
-    }
-
-    const impact = mt5Impact.toString().toLowerCase();
-    if (impact.includes('high') || impact.includes('3')) return 'HIGH';
-    if (impact.includes('medium') || impact.includes('2')) return 'MEDIUM';
-    return 'LOW';
-  }
-
-  /**
-   * Calculate sentiment based on actual vs expected values
-   */
-  private calculateSentiment(actual?: number, expected?: number): 'BULLISH' | 'BEARISH' | 'NEUTRAL' {
-    if (!actual || !expected) return 'NEUTRAL';
-    
-    const difference = ((actual - expected) / expected) * 100;
-    
-    if (difference > 5) return 'BULLISH';
-    if (difference < -5) return 'BEARISH';
-    return 'NEUTRAL';
-  }
-
-  /**
-   * Calculate confidence score based on impact
-   */
-  private calculateConfidence(impact: string | number): number {
-    if (typeof impact === 'number') {
-      if (impact >= 3) return 85;
-      if (impact >= 2) return 65;
-      return 45;
-    }
-
-    const impactStr = impact.toString().toLowerCase();
-    if (impactStr.includes('high') || impactStr.includes('3')) return 85;
-    if (impactStr.includes('medium') || impactStr.includes('2')) return 65;
-    return 45;
-  }
-
-  /**
-   * Calculate price impact based on actual vs expected
-   */
-  private calculatePriceImpact(actual?: number, expected?: number): number {
-    if (!actual || !expected) return 0;
-    
-    const difference = ((actual - expected) / expected) * 100;
-    return Math.min(Math.max(difference * 0.1, -1), 1); // Limit to -1 to 1
-  }
-
-  /**
-   * Extract currency from news text
-   */
-  private extractCurrencyFromNews(text: string): string {
-    const textLower = text.toLowerCase();
-    
-    if (textLower.includes('euro') || textLower.includes('eur') || textLower.includes('ecb')) return 'EUR';
-    if (textLower.includes('dollar') || textLower.includes('usd') || textLower.includes('fed')) return 'USD';
-    if (textLower.includes('yen') || textLower.includes('jpy') || textLower.includes('boj')) return 'JPY';
-    if (textLower.includes('pound') || textLower.includes('gbp') || textLower.includes('boe')) return 'GBP';
-    if (textLower.includes('swiss') || textLower.includes('chf') || textLower.includes('snb')) return 'CHF';
-    if (textLower.includes('australian') || textLower.includes('aud') || textLower.includes('rba')) return 'AUD';
-    if (textLower.includes('canadian') || textLower.includes('cad') || textLower.includes('boc')) return 'CAD';
-    
-    return 'USD'; // Default
-  }
-
-  /**
-   * Analyze news sentiment from text
-   */
-  private analyzeNewsSentiment(text: string): 'BULLISH' | 'BEARISH' | 'NEUTRAL' {
-    const textLower = text.toLowerCase();
-    
-    const bullishWords = ['rise', 'increase', 'growth', 'positive', 'strong', 'boost', 'gains', 'bullish', 'recovery'];
-    const bearishWords = ['fall', 'decrease', 'decline', 'negative', 'weak', 'drop', 'losses', 'bearish', 'recession'];
-    
-    let bullishScore = 0;
-    let bearishScore = 0;
-    
-    bullishWords.forEach(word => {
-      if (textLower.includes(word)) bullishScore++;
-    });
-    
-    bearishWords.forEach(word => {
-      if (textLower.includes(word)) bearishScore++;
-    });
-    
-    if (bullishScore > bearishScore) return 'BULLISH';
-    if (bearishScore > bullishScore) return 'BEARISH';
-    return 'NEUTRAL';
-  }
-
-  /**
-   * Calculate sentiment from MT5 symbol data
-   */
-  private calculateSentimentFromSymbol(symbol: any): number {
-    // This is a simplified sentiment calculation
-    // In a real implementation, you'd analyze price movement, volume, etc.
-    return 50; // Neutral default
-  }
-
-  /**
-   * Disconnect from MT5
-   */
-  async disconnect(): Promise<void> {
-    if (this.isConnected) {
-      console.log('🔌 Disconnecting from MT5...');
-      this.isConnected = false;
-      this.accountId = undefined;
-    }
-  }
-
-  /**
-   * Check connection status
-   */
-  isConnectedToMT5(): boolean {
-    return this.isConnected;
+    return true;
+  } catch (error) {
+    console.error('❌ Failed to connect to MT5:', error);
+    console.error('Please check your API credentials and try again.');
+    return false;
   }
 }
 
-export default MT5Connector;
+export function isMT5Connected(): boolean {
+  return isConnected && connection !== null;
+}
+
+// Get real historical prices from MT5
+export async function getHistoricalPrices(
+  symbol: string,
+  startDate: Date,
+  endDate: Date,
+  timeframe: 'M1' | 'M5' | 'M15' | 'M30' | 'H1' | 'H4' | 'D1' = 'H1'
+): Promise<any[]> {
+  if (!isMT5Connected() || !connection) {
+    throw new Error(`MT5 not connected. Cannot get historical data for ${symbol}. Please check your connection.`);
+  }
+
+  try {
+    console.log(`📊 Fetching real MT5 data for ${symbol} from ${startDate} to ${endDate}`);
+    
+    // Convert timeframe to MT5 format
+    const mt5Timeframe = timeframe === 'M1' ? '1m' : 
+                        timeframe === 'M5' ? '5m' : 
+                        timeframe === 'M15' ? '15m' : 
+                        timeframe === 'M30' ? '30m' : 
+                        timeframe === 'H1' ? '1h' : 
+                        timeframe === 'H4' ? '4h' : '1d';
+    
+    // Get historical data from MT5
+    const historicalData = await connection.getHistoricalPrices(symbol, mt5Timeframe, startDate, endDate);
+    
+    if (historicalData && historicalData.length > 0) {
+      console.log(`✅ Got ${historicalData.length} real price bars for ${symbol}`);
+      
+      // Transform MT5 data to our format
+      return historicalData.map((bar: any) => ({
+        timestamp: new Date(bar.time),
+        open: bar.open,
+        high: bar.high,
+        low: bar.low,
+        close: bar.close,
+        volume: bar.tickVolume || 0,
+        spread: bar.spread || 0
+      }));
+    } else {
+      throw new Error(`No historical data found for ${symbol} in MT5.`);
+    }
+      } catch (error) {
+      console.error(`❌ Error fetching MT5 historical data for ${symbol}:`, error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`Failed to get historical data for ${symbol}: ${errorMessage}`);
+    }
+}
+
+// Get real live prices from MT5
+export async function getLivePrices(symbols: string[]): Promise<any[]> {
+  if (!isMT5Connected() || !connection) {
+    throw new Error('MT5 not connected. Cannot get live prices. Please check your connection.');
+  }
+
+  try {
+    console.log(`📈 Fetching real live prices for: ${symbols.join(', ')}`);
+    
+    const livePrices = [];
+    
+    for (const symbol of symbols) {
+      try {
+        // Get current price from MT5
+        const price = await connection.getSymbolPrice(symbol);
+        
+        if (price) {
+          livePrices.push({
+            symbol: symbol,
+            bid: price.bid,
+            ask: price.ask,
+            spread: price.ask - price.bid,
+            timestamp: new Date(),
+            source: 'MT5'
+          });
+        }
+      } catch (error) {
+        console.error(`❌ Error getting live price for ${symbol}:`, error);
+      }
+    }
+    
+    if (livePrices.length > 0) {
+      console.log(`✅ Got real live prices for ${livePrices.length} symbols`);
+      return livePrices;
+    } else {
+      throw new Error('No live prices available from MT5.');
+    }
+      } catch (error) {
+      console.error('❌ Error fetching MT5 live prices:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`Failed to get live prices: ${errorMessage}`);
+    }
+}
+
+// Get real economic calendar from MT5
+export async function getEconomicCalendar(startDate: Date, endDate: Date): Promise<any[]> {
+  if (!isMT5Connected() || !connection) {
+    throw new Error('MT5 not connected. Cannot get economic calendar. Please check your connection.');
+  }
+
+  try {
+    console.log('📅 Fetching real economic calendar from MT5...');
+    
+    // Note: MT5 doesn't directly provide economic calendar
+    // We'll use external sources for real economic data
+    const realEvents = await getRealEconomicEvents(startDate, endDate);
+    
+    if (realEvents && realEvents.length > 0) {
+      console.log(`✅ Got ${realEvents.length} real economic events`);
+      return realEvents;
+    } else {
+      throw new Error('No economic events available. Please check your data sources.');
+    }
+      } catch (error) {
+      console.error('❌ Error fetching real economic calendar:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`Failed to get economic calendar: ${errorMessage}`);
+    }
+}
+
+// Get real market sentiment from MT5
+export async function getMarketSentiment(symbols: string[]): Promise<any[]> {
+  if (!isMT5Connected() || !connection) {
+    throw new Error('MT5 not connected. Cannot get market sentiment. Please check your connection.');
+  }
+
+  try {
+    console.log(`🧠 Fetching real market sentiment for: ${symbols.join(', ')}`);
+    
+    // Calculate real sentiment based on price movements and volume
+    const realSentiment = await calculateRealMarketSentiment(symbols);
+    
+    if (realSentiment && realSentiment.length > 0) {
+      console.log(`✅ Calculated real sentiment for ${realSentiment.length} symbols`);
+      return realSentiment;
+    } else {
+      throw new Error('No sentiment data available. Please check your connection.');
+    }
+      } catch (error) {
+      console.error('❌ Error calculating real market sentiment:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`Failed to get market sentiment: ${errorMessage}`);
+    }
+}
+
+// Get current trading session
+export async function getCurrentSession(): Promise<any> {
+  const now = new Date();
+  const utcHour = now.getUTCHours();
+  
+  let session = 'CLOSED';
+  let nextAnalysis = new Date();
+  
+  if (utcHour >= 0 && utcHour < 8) {
+    session = 'ASIA';
+    nextAnalysis = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 7, 30, 0);
+  } else if (utcHour >= 8 && utcHour < 16) {
+    session = 'LONDON';
+    nextAnalysis = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 13, 30, 0);
+  } else if (utcHour >= 16 && utcHour < 24) {
+    session = 'NEW_YORK';
+    nextAnalysis = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 19, 30, 0);
+  }
+  
+  return {
+    current: session,
+    nextAnalysis: nextAnalysis,
+    countdown: getCountdown(nextAnalysis),
+    status: session === 'CLOSED' ? 'CLOSED' : 'ACTIVE'
+  };
+}
+
+// Helper function to get countdown
+function getCountdown(targetDate: Date): string {
+  const now = new Date();
+  const diff = targetDate.getTime() - now.getTime();
+  
+  if (diff <= 0) return '00:00:00';
+  
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+  const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+  
+  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+}
+
+// Get real economic events from external sources
+async function getRealEconomicEvents(startDate: Date, endDate: Date): Promise<any[]> {
+  try {
+    // TODO: Integrate with real economic data providers
+    // For now, return empty array - user must provide real data
+    console.warn('⚠️ No economic data provider configured. Please set up real economic data sources.');
+    return [];
+  } catch (error) {
+    console.error('❌ Error fetching real economic events:', error);
+    return [];
+  }
+}
+
+// Calculate real market sentiment based on price data
+async function calculateRealMarketSentiment(symbols: string[]): Promise<any[]> {
+  try {
+    const sentiment = [];
+    
+    for (const symbol of symbols) {
+      // Get recent price data to calculate sentiment
+      const endDate = new Date();
+      const startDate = new Date(endDate.getTime() - (24 * 60 * 60 * 1000)); // Last 24 hours
+      
+      const priceData = await getHistoricalPrices(symbol, startDate, endDate, 'H1');
+      
+      if (priceData && priceData.length > 0) {
+        // Calculate sentiment based on price movement, volatility, and trend
+        const sentimentScore = calculateSentimentFromPriceData(priceData);
+        
+        sentiment.push({
+          symbol: symbol,
+          score: sentimentScore,
+          trend: sentimentScore > 15 ? 'BULLISH' : sentimentScore < 10 ? 'BEARISH' : 'NEUTRAL',
+          strength: sentimentScore > 20 ? 'EXTREME' : sentimentScore > 15 ? 'STRONG' : sentimentScore > 10 ? 'MODERATE' : 'WEAK',
+          lastUpdate: new Date(),
+          source: 'MT5_Price_Analysis'
+        });
+      }
+    }
+    
+    return sentiment;
+  } catch (error) {
+    console.error('❌ Error calculating real market sentiment:', error);
+    return [];
+  }
+}
+
+// Calculate sentiment score from price data
+function calculateSentimentFromPriceData(priceData: any[]): number {
+  if (priceData.length < 2) return 12;
+  
+  let bullishSignals = 0;
+  let bearishSignals = 0;
+  
+  for (let i = 1; i < priceData.length; i++) {
+    const current = priceData[i];
+    const previous = priceData[i - 1];
+    
+    // Price movement
+    if (current.close > previous.close) bullishSignals++;
+    else if (current.close < previous.close) bearishSignals++;
+    
+    // Volatility
+    const volatility = (current.high - current.low) / previous.close;
+    if (volatility > 0.002) { // High volatility
+      if (current.close > previous.close) bullishSignals += 0.5;
+      else bearishSignals += 0.5;
+    }
+  }
+  
+  // Calculate sentiment score (1-25)
+  const totalSignals = bullishSignals + bearishSignals;
+  if (totalSignals === 0) return 12;
+  
+  const bullishRatio = bullishSignals / totalSignals;
+  const score = Math.round(1 + (bullishRatio * 24));
+  
+  return Math.max(1, Math.min(25, score));
+}

@@ -15,6 +15,8 @@ import calendarRoutes from './routes/calendar';
 import scorecardRoutes from './routes/scorecard';
 import analyticsRoutes from './routes/analytics';
 import currencyStrengthRoutes from './routes/currencyStrength';
+import strategyRoutes from './routes/strategy';
+
 import healthRoutes from './routes/health';
 import mt5TestRoutes from './routes/mt5-test';
 
@@ -54,6 +56,8 @@ app.use('/api/v1/calendar', calendarRoutes);
 app.use('/api/v1/scorecard', scorecardRoutes);
 app.use('/api/v1/analytics', analyticsRoutes);
 app.use('/api/v1/currency-strength', currencyStrengthRoutes);
+app.use('/api/v1/strategy', strategyRoutes);
+
 app.use('/api/v1/mt5-test', mt5TestRoutes);
 
 // Root endpoint

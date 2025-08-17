@@ -74,6 +74,59 @@ export interface DashboardData {
   activeAlerts: number;
 }
 
+// New Trading Strategy Types
+export interface StrategySignal {
+  id: string;
+  pair: string;
+  signal: 'BUY' | 'SELL' | 'HOLD' | 'READY';
+  confidence: number;
+  powerScore: number;
+  emaTouches: number;
+  session: 'ASIA' | 'LONDON' | 'NEW_YORK' | 'CLOSED';
+  entryPrice?: number;
+  stopLoss?: number;
+  takeProfit?: number;
+  riskReward: number;
+  timestamp: Date;
+  conditions: string[];
+  status: 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+}
+
+export interface PowerScore {
+  currency: string;
+  score: number;
+  trend: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+  strength: 'EXTREME' | 'STRONG' | 'MODERATE' | 'WEAK';
+  lastUpdate: Date;
+}
+
+export interface EMAStatus {
+  pair: string;
+  h1Touches: number;
+  m15Touches: number;
+  alignment: 'PERFECT' | 'GOOD' | 'FAIR' | 'POOR';
+  trend: 'STRONG_UP' | 'UP' | 'NEUTRAL' | 'DOWN' | 'STRONG_DOWN';
+  lastUpdate: Date;
+}
+
+export interface SessionInfo {
+  current: 'ASIA' | 'LONDON' | 'NEW_YORK' | 'CLOSED';
+  nextAnalysis: Date;
+  countdown: string;
+  status: 'ACTIVE' | 'BREAK' | 'CLOSED';
+}
+
+export interface StrategyPerformance {
+  totalSignals: number;
+  successfulSignals: number;
+  winRate: number;
+  averageProfit: number;
+  totalProfit: number;
+  maxDrawdown: number;
+  sharpeRatio: number;
+  lastUpdate: Date;
+}
+
 export interface ChartDataPoint {
   date: Date;
   sentiment: number;

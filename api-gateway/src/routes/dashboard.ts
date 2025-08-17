@@ -24,11 +24,12 @@ router.get('/', async (req, res) => {
 
     // Get recent events (increased to show more data)
     const eventsResult = await query(`
-      SELECT id, currency, event_type, title, description, event_date, 
+      SELECT DISTINCT ON (title, currency, event_date) 
+             id, currency, event_type, title, description, event_date, 
              actual_value, expected_value, previous_value, impact, sentiment, 
              confidence_score, price_impact, source, url, created_at
       FROM economic_events
-      ORDER BY event_date DESC
+      ORDER BY title, currency, event_date, created_at DESC
       LIMIT 50
     `);
 
@@ -72,6 +73,68 @@ router.get('/', async (req, res) => {
   } catch (error) {
     console.error('Error fetching dashboard data:', error);
     return res.status(500).json({ error: 'Failed to fetch dashboard data' });
+  }
+});
+
+// Clean up duplicate events
+router.post('/cleanup-duplicates', async (req, res) => {
+  try {
+    console.log('🧹 Starting aggressive duplicate event cleanup...');
+    
+    // First, find all duplicate events by title and currency
+    const findDuplicatesQuery = `
+      SELECT title, currency, COUNT(*) as count
+      FROM economic_events
+      GROUP BY title, currency
+      HAVING COUNT(*) > 1
+      ORDER BY count DESC
+    `;
+    
+    const duplicatesResult = await query(findDuplicatesQuery);
+    console.log(`🔍 Found ${duplicatesResult.rows.length} groups of duplicate events`);
+    
+    let totalRemoved = 0;
+    
+    // Remove duplicates for each group, keeping only the most recent
+    for (const duplicate of duplicatesResult.rows) {
+      const removeDuplicatesQuery = `
+        DELETE FROM economic_events 
+        WHERE title = $1 AND currency = $2
+        AND id NOT IN (
+          SELECT id FROM (
+            SELECT id FROM economic_events 
+            WHERE title = $1 AND currency = $2
+            ORDER BY created_at DESC
+            LIMIT 1
+          ) AS keep
+        )
+      `;
+      
+      const result = await query(removeDuplicatesQuery, [duplicate.title, duplicate.currency]);
+      const removedCount = result.rowCount || 0;
+      totalRemoved += removedCount;
+      console.log(`🗑️ Removed ${removedCount} duplicates for "${duplicate.title}" (${duplicate.currency})`);
+    }
+    
+    console.log(`✅ Aggressive cleanup completed. Removed ${totalRemoved} duplicate events`);
+    
+    // Clear cache to force refresh
+    const redis = getRedisClient();
+    await redis.del('dashboard:data');
+    
+    res.json({ 
+      success: true, 
+      message: `Removed ${totalRemoved} duplicate events from ${duplicatesResult.rows.length} groups`,
+      removedCount: totalRemoved,
+      duplicateGroups: duplicatesResult.rows.length
+    });
+    
+  } catch (error) {
+    console.error('Error cleaning up duplicates:', error);
+    res.status(500).json({ 
+      error: 'Failed to clean up duplicates',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 });
 

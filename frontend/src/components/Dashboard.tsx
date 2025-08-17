@@ -9,13 +9,15 @@ import SentimentAnalysisInfo from './SentimentAnalysisInfo';
 import AddNewsForm from './AddNewsForm';
 import EventManagement from './EventManagement';
 import MT5NewsWidget from './MT5NewsWidget';
+import StrategyMonitor from './StrategyMonitor';
+import BacktestTable from './BacktestTable';
 import { EconomicEvent, CurrencySentiment } from '../types';
 import './Dashboard.css';
 
 const Dashboard: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { data, loading, error } = useSelector((state: RootState) => state.dashboard);
-  const [activeView, setActiveView] = useState<'overview' | 'comprehensive' | 'algorithm' | 'manage' | 'scorecard'>('overview');
+  const [activeView, setActiveView] = useState<'overview' | 'comprehensive' | 'algorithm' | 'manage' | 'scorecard' | 'strategy' | 'backtest'>('overview');
   const [showAddNewsForm, setShowAddNewsForm] = useState(false);
   const [selectedCurrency, setSelectedCurrency] = useState<string | null>(null);
 
@@ -73,11 +75,22 @@ const Dashboard: React.FC = () => {
     return filtered;
   };
 
-  // Get all events (either filtered or all)
+  // Get all events (either filtered or all) with duplicate prevention
   const getDisplayEvents = (): EconomicEvent[] => {
     const events = selectedCurrency ? getFilteredEvents() : (data?.recentEvents || []);
-    console.log('🔍 getDisplayEvents returning:', events.length, 'events');
-    return events;
+    
+    // Remove duplicates based on title, currency, and date
+    const uniqueEvents = events.filter((event, index, self) => {
+      const firstIndex = self.findIndex(e => 
+        e.title === event.title && 
+        e.currency === event.currency && 
+        Math.abs(new Date(e.date).getTime() - new Date(event.date).getTime()) < 60000 // Within 1 minute
+      );
+      return index === firstIndex;
+    });
+    
+    console.log('🔍 getDisplayEvents returning:', uniqueEvents.length, 'unique events (filtered from', events.length, 'total)');
+    return uniqueEvents;
   };
 
   // Get events count for display
@@ -200,6 +213,18 @@ const Dashboard: React.FC = () => {
             onClick={() => setActiveView('manage')}
           >
             ⚙️ Manage Events
+          </button>
+          <button 
+            className={`nav-btn ${activeView === 'strategy' ? 'active' : ''}`}
+            onClick={() => setActiveView('strategy')}
+          >
+            🎯 Strategy Monitor
+          </button>
+          <button 
+            className={`nav-btn ${activeView === 'backtest' ? 'active' : ''}`}
+            onClick={() => setActiveView('backtest')}
+          >
+            📊 Backtest Results
           </button>
           <button 
             className="add-news-btn"
@@ -368,6 +393,7 @@ const Dashboard: React.FC = () => {
               {!selectedCurrency && (
                 <div className="events-help">
                   <p>💡 <strong>Tip:</strong> Click on any currency card above to filter events and see detailed analysis for that currency.</p>
+                  <p>✅ <strong>Data Quality:</strong> Showing {getDisplayEvents().length} unique events (filtered from {data?.recentEvents?.length || 0} total)</p>
                 </div>
               )}
               
@@ -441,6 +467,14 @@ const Dashboard: React.FC = () => {
             onEventUpdated={handleEventUpdated}
             onEventDeleted={handleEventDeleted}
           />
+        )}
+
+        {activeView === 'strategy' && (
+          <StrategyMonitor />
+        )}
+
+        {activeView === 'backtest' && (
+          <BacktestTable />
         )}
       </main>
 
