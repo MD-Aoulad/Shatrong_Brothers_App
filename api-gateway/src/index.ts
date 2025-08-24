@@ -16,6 +16,7 @@ import scorecardRoutes from './routes/scorecard';
 import analyticsRoutes from './routes/analytics';
 import currencyStrengthRoutes from './routes/currencyStrength';
 import strategyRoutes from './routes/strategy';
+import dataRoutes from './routes/data';
 
 import healthRoutes from './routes/health';
 import mt5TestRoutes from './routes/mt5-test';
@@ -57,6 +58,7 @@ app.use('/api/v1/scorecard', scorecardRoutes);
 app.use('/api/v1/analytics', analyticsRoutes);
 app.use('/api/v1/currency-strength', currencyStrengthRoutes);
 app.use('/api/v1/strategy', strategyRoutes);
+app.use('/api/v1/data', dataRoutes);
 
 app.use('/api/v1/mt5-test', mt5TestRoutes);
 
@@ -73,7 +75,8 @@ app.get('/', (req, res) => {
       calendar: '/api/v1/calendar',
       scorecard: '/api/v1/scorecard',
       analytics: '/api/v1/analytics',
-      currency_strength: '/api/v1/currency-strength'
+      currency_strength: '/api/v1/currency-strength',
+      data: '/api/v1/data'
     },
     documentation: '/api/docs',
     health: '/health'
@@ -102,7 +105,8 @@ app.use('*', (req, res) => {
       '/api/v1/calendar',
       '/api/v1/scorecard',
       '/api/v1/analytics',
-      '/api/v1/currency-strength'
+      '/api/v1/currency-strength',
+      '/api/v1/data'
     ]
   });
 });

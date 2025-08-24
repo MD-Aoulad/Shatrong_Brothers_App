@@ -1,490 +1,526 @@
-import React, { useEffect, useState } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
-import { RootState, AppDispatch } from '../store';
-import { fetchDashboardData } from '../store/slices/dashboardSlice';
-import CurrencyCard from './CurrencyCard';
-import EventTimeline from './EventTimeline';
-import ComprehensiveEventView from './ComprehensiveEventView';
-import SentimentAnalysisInfo from './SentimentAnalysisInfo';
-import AddNewsForm from './AddNewsForm';
-import EventManagement from './EventManagement';
-import MT5NewsWidget from './MT5NewsWidget';
-import StrategyMonitor from './StrategyMonitor';
-import BacktestTable from './BacktestTable';
-import { EconomicEvent, CurrencySentiment } from '../types';
+import React, { useState, useEffect } from 'react';
+import { useDataRefresh } from '../hooks/useDataRefresh';
+import { dataRefreshApi } from '../services/api';
 import './Dashboard.css';
 
+interface CurrencyData {
+  currency: string;
+  sentiment: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+  confidence: number;
+  price: number;
+  change: number;
+  changePercent: number;
+}
+
+interface EconomicEvent {
+  id: string;
+  currency: string;
+  title: string;
+  impact: 'HIGH' | 'MEDIUM' | 'LOW';
+  eventDate: Date;
+  actualValue?: number;
+  expectedValue?: number;
+  previousValue?: number;
+  sentiment: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+}
+
+interface CurrencyPowerScore {
+  currency: string;
+  totalScore: number;
+  strength: 'STRONG' | 'MODERATE' | 'WEAK';
+  trend: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+  newsCount: number;
+  bullishCount: number;
+  bearishCount: number;
+  neutralCount: number;
+}
+
+interface ForexDataSummary {
+  totalEvents: number;
+  currencies: string[];
+  dateRange: {
+    start: string;
+    end: string;
+  };
+}
+
 const Dashboard: React.FC = () => {
-  const dispatch = useDispatch<AppDispatch>();
-  const { data, loading, error } = useSelector((state: RootState) => state.dashboard);
-  const [activeView, setActiveView] = useState<'overview' | 'comprehensive' | 'algorithm' | 'manage' | 'scorecard' | 'strategy' | 'backtest'>('overview');
-  const [showAddNewsForm, setShowAddNewsForm] = useState(false);
-  const [selectedCurrency, setSelectedCurrency] = useState<string | null>(null);
+  // Data refresh hook
+  const { 
+    isRefreshing, 
+    lastRefresh, 
+    refreshCount, 
+    error, 
+    refreshData, 
+    canRefresh, 
+    timeSinceLastRefresh 
+  } = useDataRefresh(true); // Auto-refresh on mount
 
+  const [currencies, setCurrencies] = useState<CurrencyData[]>([
+    {
+      currency: 'EUR/USD',
+      sentiment: 'BULLISH',
+      confidence: 85,
+      price: 1.0925,
+      change: 0.0025,
+      changePercent: 0.23
+    },
+    {
+      currency: 'GBP/USD',
+      sentiment: 'BEARISH',
+      confidence: 72,
+      price: 1.2678,
+      change: -0.0032,
+      changePercent: -0.25
+    },
+    {
+      currency: 'USD/JPY',
+      sentiment: 'NEUTRAL',
+      confidence: 45,
+      price: 148.95,
+      change: 0.15,
+      changePercent: 0.10
+    },
+    {
+      currency: 'USD/CHF',
+      sentiment: 'BULLISH',
+      confidence: 68,
+      price: 0.8845,
+      change: 0.0012,
+      changePercent: 0.14
+    }
+  ]);
+
+  const [marketStatus, setMarketStatus] = useState({
+    isOpen: true,
+    lastUpdate: new Date(),
+    totalVolume: '2.4T',
+    activePairs: 28
+  });
+
+  const [economicEvents, setEconomicEvents] = useState<EconomicEvent[]>([]);
+  const [isLoadingEvents, setIsLoadingEvents] = useState(false);
+  const [currencyPowerScores, setCurrencyPowerScores] = useState<CurrencyPowerScore[]>([]);
+  const [isLoadingPowerScores, setIsLoadingPowerScores] = useState(false);
+  const [forexDataSummary, setForexDataSummary] = useState<ForexDataSummary | null>(null);
+
+  // Fetch comprehensive forex data from the new API
+  const fetchComprehensiveForexData = async () => {
+    try {
+      setIsLoadingPowerScores(true);
+      setIsLoadingEvents(true);
+      
+      const response = await fetch('http://localhost:8002/api/comprehensive');
+      if (response.ok) {
+        const data = await response.json();
+        
+        if (data.success && data.data) {
+          // Set currency power scores
+          setCurrencyPowerScores(data.data.currencyPowerScores || []);
+          
+          // Set economic events
+          const events = data.data.events || [];
+          const formattedEvents = events.slice(0, 10).map((event: any) => ({
+            id: event.id,
+            currency: event.currency,
+            title: event.title,
+            impact: event.impact,
+            eventDate: new Date(event.event_date),
+            actualValue: event.actual_value,
+            expectedValue: event.expected_value,
+            previousValue: event.previous_value,
+            sentiment: event.sentiment
+          }));
+          setEconomicEvents(formattedEvents);
+          
+          // Set summary data
+          setForexDataSummary(data.data.summary);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch comprehensive forex data:', error);
+    } finally {
+      setIsLoadingPowerScores(false);
+      setIsLoadingEvents(false);
+    }
+  };
+
+  // Fetch latest data on mount and after refresh
   useEffect(() => {
-    dispatch(fetchDashboardData());
-  }, [dispatch]);
+    fetchComprehensiveForexData();
+  }, []);
 
-  const handleNewsAdded = (newEvent: EconomicEvent) => {
-    // Refresh dashboard data to include the new event
-    dispatch(fetchDashboardData());
-    setShowAddNewsForm(false);
-  };
-
-  const handleCloseAddNews = () => {
-    setShowAddNewsForm(false);
-  };
-
-  const handleEventUpdated = (updatedEvent: EconomicEvent) => {
-    // Refresh dashboard data to reflect the updated event
-    dispatch(fetchDashboardData());
-  };
-
-  const handleEventDeleted = (eventId: string) => {
-    // Refresh dashboard data to reflect the deletion
-    dispatch(fetchDashboardData());
-  };
-
-  const handleCurrencyClick = (currency: string) => {
-    console.log('🎯 Currency clicked:', currency);
-    console.log('🎯 Previous selection:', selectedCurrency);
-    
-    // Toggle selection: if same currency is clicked, deselect it; otherwise select the new one
-    const newSelection = selectedCurrency === currency ? null : currency;
-    setSelectedCurrency(newSelection);
-    
-    console.log('🎯 New selection:', newSelection);
-    console.log('🎯 Available events:', data?.recentEvents?.length || 0);
-    
-    if (newSelection) {
-      const filtered = data?.recentEvents?.filter(event => event.currency === newSelection) || [];
-      console.log('🎯 Filtered events for', newSelection, ':', filtered.length);
-      console.log('🎯 Sample filtered events:', filtered.slice(0, 3));
+  // Refresh data when refreshData is called
+  useEffect(() => {
+    if (refreshCount > 0) {
+      fetchComprehensiveForexData();
     }
-  };
+  }, [refreshCount]);
 
-  // Filter events by selected currency
-  const getFilteredEvents = (): EconomicEvent[] => {
-    console.log('🔍 getFilteredEvents called with selectedCurrency:', selectedCurrency);
-    if (!selectedCurrency || !data?.recentEvents) {
-      console.log('🔍 No currency selected or no data, returning empty array');
-      return [];
-    }
-    const filtered = data.recentEvents.filter(event => event.currency === selectedCurrency);
-    console.log('🔍 Filtered events count:', filtered.length);
-    return filtered;
-  };
+  // Auto-refresh every 5 minutes
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchComprehensiveForexData();
+    }, 5 * 60 * 1000);
 
-  // Get all events (either filtered or all) with duplicate prevention
-  const getDisplayEvents = (): EconomicEvent[] => {
-    const events = selectedCurrency ? getFilteredEvents() : (data?.recentEvents || []);
-    
-    // Remove duplicates based on title, currency, and date
-    const uniqueEvents = events.filter((event, index, self) => {
-      const firstIndex = self.findIndex(e => 
-        e.title === event.title && 
-        e.currency === event.currency && 
-        Math.abs(new Date(e.date).getTime() - new Date(event.date).getTime()) < 60000 // Within 1 minute
-      );
-      return index === firstIndex;
-    });
-    
-    console.log('🔍 getDisplayEvents returning:', uniqueEvents.length, 'unique events (filtered from', events.length, 'total)');
-    return uniqueEvents;
-  };
+    return () => clearInterval(interval);
+  }, []);
 
-  // Get events count for display
-  const getEventsCount = (): { total: number; filtered: number } => {
-    const total = data?.recentEvents?.length || 0;
-    const filtered = selectedCurrency ? getFilteredEvents().length : total;
-    return { total, filtered };
-  };
-
-  // Get sentiment details for selected currency
-  const getSelectedCurrencySentiment = (): CurrencySentiment | null => {
-    if (!selectedCurrency || !data?.currencySentiments) return null;
-    return data.currencySentiments.find(s => s.currency === selectedCurrency) || null;
-  };
-
-  // Calculate sentiment breakdown for selected currency
-  const getSentimentBreakdown = () => {
-    const filteredEvents = getFilteredEvents();
-    const breakdown = {
-      bullish: 0,
-      bearish: 0,
-      neutral: 0,
-      totalEvents: filteredEvents.length,
-      highImpact: 0,
-      mediumImpact: 0,
-      lowImpact: 0
+  // Format currency power score for display
+  const formatCurrencyPowerScore = (score: CurrencyPowerScore) => {
+    const strengthColor = {
+      'STRONG': '#22c55e',
+      'MODERATE': '#f59e0b',
+      'WEAK': '#ef4444'
     };
 
-    filteredEvents.forEach(event => {
-      switch (event.sentiment) {
-        case 'BULLISH':
-          breakdown.bullish++;
-          break;
-        case 'BEARISH':
-          breakdown.bearish++;
-          break;
-        case 'NEUTRAL':
-          breakdown.neutral++;
-          break;
-      }
+    const trendIcon = {
+      'BULLISH': '📈',
+      'BEARISH': '📉',
+      'NEUTRAL': '➡️'
+    };
 
-      switch (event.impact) {
-        case 'HIGH':
-          breakdown.highImpact++;
-          break;
-        case 'MEDIUM':
-          breakdown.mediumImpact++;
-          break;
-        case 'LOW':
-          breakdown.lowImpact++;
-          break;
-      }
-    });
-
-    return breakdown;
+    return (
+      <div key={score.currency} className="currency-power-card">
+        <div className="currency-header">
+          <h3>{score.currency}</h3>
+          <span className="trend-icon">{trendIcon[score.trend]}</span>
+        </div>
+        <div className="power-score">
+          <span className="score-value" style={{ color: strengthColor[score.strength] }}>
+            {score.totalScore}/100
+          </span>
+          <span className="strength-badge" style={{ backgroundColor: strengthColor[score.strength] }}>
+            {score.strength}
+          </span>
+        </div>
+        <div className="trend-info">
+          <span className="trend-text">{score.trend}</span>
+        </div>
+        <div className="news-stats">
+          <small>📰 {score.newsCount} events | 🟢 {score.bullishCount} | 🔴 {score.bearishCount} | ⚪ {score.neutralCount}</small>
+        </div>
+      </div>
+    );
   };
 
-  const selectedSentiment = getSelectedCurrencySentiment();
-  const sentimentBreakdown = getSentimentBreakdown();
+  // Format economic event for display
+  const formatEconomicEvent = (event: EconomicEvent) => {
+    const impactColor = {
+      'HIGH': '#ef4444',
+      'MEDIUM': '#f59e0b',
+      'LOW': '#22c55e'
+    };
 
-  if (loading) {
+    const sentimentIcon = {
+      'BULLISH': '🟢',
+      'BEARISH': '🔴',
+      'NEUTRAL': '⚪'
+    };
+
     return (
-      <div className="dashboard-loading">
-        <div className="loading-spinner"></div>
-        <p>Loading dashboard data...</p>
+      <div key={event.id} className="economic-event-card">
+        <div className="event-header">
+          <span className="currency-badge">{event.currency}</span>
+          <span 
+            className="impact-badge" 
+            style={{ backgroundColor: impactColor[event.impact] }}
+          >
+            {event.impact}
+          </span>
+          <span className="sentiment-icon">{sentimentIcon[event.sentiment]}</span>
+        </div>
+        <h4 className="event-title">{event.title}</h4>
+        <div className="event-details">
+          <span className="event-date">
+            📅 {event.eventDate.toLocaleDateString()}
+          </span>
+          {event.actualValue && (
+            <span className="actual-value">
+              📊 Actual: {event.actualValue}
+            </span>
+          )}
+          {event.expectedValue && (
+            <span className="expected-value">
+              🎯 Expected: {event.expectedValue}
+            </span>
+          )}
+        </div>
       </div>
     );
-  }
+  };
 
-  if (error) {
-    return (
-      <div className="dashboard-error">
-        <h2>Error Loading Dashboard</h2>
-        <p>{error}</p>
-        <button onClick={() => dispatch(fetchDashboardData())}>Retry</button>
-      </div>
-    );
-  }
+  const getSentimentColor = (sentiment: string) => {
+    switch (sentiment) {
+      case 'BULLISH':
+        return 'var(--forex-green)';
+      case 'BEARISH':
+        return 'var(--forex-red)';
+      default:
+        return 'var(--forex-yellow)';
+    }
+  };
 
-  if (!data) {
-    return (
-      <div className="dashboard-no-data">
-        <h2>No Dashboard Data Available</h2>
-        <p>Please check your connection and try again.</p>
-      </div>
-    );
-  }
+  const getSentimentIcon = (sentiment: string) => {
+    switch (sentiment) {
+      case 'BULLISH':
+        return '📈';
+      case 'BEARISH':
+        return '📉';
+      default:
+        return '➡️';
+    }
+  };
+
+  const getImpactColor = (impact: string) => {
+    switch (impact) {
+      case 'HIGH':
+        return 'var(--forex-red)';
+      case 'MEDIUM':
+        return 'var(--forex-yellow)';
+      default:
+        return 'var(--forex-green)';
+    }
+  };
+
+  const formatEventDate = (date: Date) => {
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(new Date(date));
+  };
 
   return (
     <div className="dashboard">
-      <header className="dashboard-header">
-        <h1>Forex Fundamental Dashboard</h1>
-        <div className="header-actions">
-          <button 
-            className={`nav-btn ${activeView === 'overview' ? 'active' : ''}`}
-            onClick={() => setActiveView('overview')}
-          >
-            📊 Overview
-          </button>
-          <button 
-            className={`nav-btn ${activeView === 'comprehensive' ? 'active' : ''}`}
-            onClick={() => setActiveView('comprehensive')}
-          >
-            📈 Comprehensive View
-          </button>
-          <button 
-            className={`nav-btn ${activeView === 'scorecard' ? 'active' : ''}`}
-            onClick={() => setActiveView('scorecard')}
-          >
-            🎯 Scorecard
-          </button>
-          <button 
-            className={`nav-btn ${activeView === 'algorithm' ? 'active' : ''}`}
-            onClick={() => setActiveView('algorithm')}
-          >
-            🧠 Algorithm Info
-          </button>
-          <button 
-            className={`nav-btn ${activeView === 'manage' ? 'active' : ''}`}
-            onClick={() => setActiveView('manage')}
-          >
-            ⚙️ Manage Events
-          </button>
-          <button 
-            className={`nav-btn ${activeView === 'strategy' ? 'active' : ''}`}
-            onClick={() => setActiveView('strategy')}
-          >
-            🎯 Strategy Monitor
-          </button>
-          <button 
-            className={`nav-btn ${activeView === 'backtest' ? 'active' : ''}`}
-            onClick={() => setActiveView('backtest')}
-          >
-            📊 Backtest Results
-          </button>
-          <button 
-            className="add-news-btn"
-            onClick={() => setShowAddNewsForm(true)}
-          >
-            📰 Add News
-          </button>
-        </div>
-      </header>
-
-      <main className="dashboard-main">
-        {activeView === 'overview' && (
-          <>
-            {/* Instructions Section */}
-            <section className="instructions-section">
-              <div className="instructions-content">
-                <h3>🎯 How to Use Currency Filtering</h3>
-                <p>
-                  <strong>Click on any currency card below</strong> to filter and view all news & events related to that specific currency. 
-                  The selected currency will show detailed sentiment analysis and filtered events below.
-                </p>
-                <div className="instruction-steps">
-                  <div className="step">
-                    <span className="step-number">1</span>
-                    <span>Click a currency card to select it</span>
-                  </div>
-                  <div className="step">
-                    <span className="step-number">2</span>
-                    <span>View detailed analysis and filtered news</span>
-                  </div>
-                  <div className="step">
-                    <span className="step-number">3</span>
-                    <span>Click again or use "Clear Filter" to reset</span>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section className="currency-grid">
-              <h2>Currency Sentiments</h2>
-              <div className="currency-cards">
-                {data.currencySentiments.map((sentiment) => (
-                  <CurrencyCard
-                    key={sentiment.currency}
-                    sentiment={sentiment}
-                    isSelected={selectedCurrency === sentiment.currency}
-                    onClick={() => handleCurrencyClick(sentiment.currency)}
-                  />
-                ))}
-              </div>
-            </section>
-
-            {/* Currency Detail Section - Shows when a currency is selected */}
-            {selectedCurrency && selectedSentiment && (
-              <section className="currency-detail-section">
-                <div className="filter-summary">
-                  <div className="filter-summary-content">
-                    <span className="filter-summary-text">
-                      🔍 Filtering events for <strong>{selectedCurrency}</strong> 
-                      ({getEventsCount().filtered} of {getEventsCount().total} total events)
-                    </span>
-                    <button 
-                      className="clear-filter-summary-btn"
-                      onClick={() => setSelectedCurrency(null)}
-                    >
-                      Clear Filter
-                    </button>
-                  </div>
-                </div>
-                <div className="currency-detail-header">
-                  <h2>
-                    {selectedCurrency} - Detailed Analysis
-                    <button 
-                      className="close-currency-btn"
-                      onClick={() => setSelectedCurrency(null)}
-                    >
-                      ✕
-                    </button>
-                  </h2>
-                  <div className="currency-summary">
-                    <div className="sentiment-summary">
-                      <span className="current-sentiment">
-                        Current Sentiment: <strong>{selectedSentiment.currentSentiment}</strong>
-                      </span>
-                      <span className="confidence-score">
-                        Confidence: <strong>{selectedSentiment.confidenceScore}%</strong>
-                      </span>
-                      <span className="trend">
-                        Trend: <strong>{selectedSentiment.trend}</strong>
-                      </span>
-                    </div>
-                    <div className="sentiment-breakdown">
-                      <h4>Sentiment Breakdown ({sentimentBreakdown.totalEvents} events analyzed)</h4>
-                      <div className="breakdown-stats">
-                        <div className="breakdown-item">
-                          <span className="breakdown-label">🟢 Bullish:</span>
-                          <span className="breakdown-value">{sentimentBreakdown.bullish}</span>
-                        </div>
-                        <div className="breakdown-item">
-                          <span className="breakdown-label">🔴 Bearish:</span>
-                          <span className="breakdown-value">{sentimentBreakdown.bearish}</span>
-                        </div>
-                        <div className="breakdown-item">
-                          <span className="breakdown-label">🟡 Neutral:</span>
-                          <span className="breakdown-value">{sentimentBreakdown.neutral}</span>
-                        </div>
-                      </div>
-                      <div className="impact-breakdown">
-                        <h5>Impact Level Distribution:</h5>
-                        <div className="impact-stats">
-                          <div className="impact-item">
-                            <span className="impact-label">🔴 High Impact:</span>
-                            <span className="impact-value">{sentimentBreakdown.highImpact}</span>
-                          </div>
-                          <div className="impact-item">
-                            <span className="impact-label">🟡 Medium Impact:</span>
-                            <span className="impact-value">{sentimentBreakdown.mediumImpact}</span>
-                          </div>
-                          <div className="impact-item">
-                            <span className="impact-label">🟢 Low Impact:</span>
-                            <span className="impact-value">{sentimentBreakdown.lowImpact}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="currency-events">
-                  <h3>News & Events Contributing to {selectedCurrency} Sentiment</h3>
-                  <div className="events-container">
-                    {getFilteredEvents().length > 0 ? (
-                      <EventTimeline events={getFilteredEvents()} showCurrency={false} />
-                    ) : (
-                      <div className="no-events">
-                        <p>No events found for {selectedCurrency} in the selected time period.</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </section>
-            )}
-
-            {/* MT5 News Widget - Shows today's real-time news */}
-            <MT5NewsWidget />
-            
-            <section className="recent-events">
-              <div className="events-header">
-                <h2>
-                  {selectedCurrency ? `${selectedCurrency} Events` : 'Recent Events (Latest 50)'}
-                  {selectedCurrency && (
-                    <span className="filter-info">
-                      Showing {getEventsCount().filtered} of {getEventsCount().total} events
-                      <button 
-                        className="clear-filter-btn"
-                        onClick={() => setSelectedCurrency(null)}
-                        title="Clear currency filter"
-                      >
-                        ✕ Clear Filter
-                      </button>
-                    </span>
-                  )}
-                </h2>
-              </div>
-              
-              {!selectedCurrency && (
-                <div className="events-help">
-                  <p>💡 <strong>Tip:</strong> Click on any currency card above to filter events and see detailed analysis for that currency.</p>
-                  <p>✅ <strong>Data Quality:</strong> Showing {getDisplayEvents().length} unique events (filtered from {data?.recentEvents?.length || 0} total)</p>
-                </div>
-              )}
-              
-              <EventTimeline 
-                key={`events-${selectedCurrency || 'all'}-${getDisplayEvents().length}`}
-                events={getDisplayEvents()} 
-              />
-            </section>
-          </>
-        )}
-
-        {activeView === 'comprehensive' && (
-          <ComprehensiveEventView events={data.recentEvents} />
-        )}
-
-        {activeView === 'scorecard' && (
-          <div className="scorecard-view">
-            <h2>🎯 Currency Bias Scorecard</h2>
-            <p>Advanced analysis of currency bias across multiple economic pillars.</p>
-            <div className="scorecard-grid">
-              {data.currencySentiments.map((sentiment) => (
-                <div key={sentiment.currency} className="scorecard-card">
-                  <h3>{sentiment.currency}</h3>
-                  <div className="scorecard-content">
-                    <div className="bias-indicator">
-                      <span className="bias-label">Bias:</span>
-                      <span className={`bias-value bias-${sentiment.currentSentiment.toLowerCase()}`}>
-                        {sentiment.currentSentiment}
-                      </span>
-                    </div>
-                    <div className="confidence-indicator">
-                      <span className="confidence-label">Confidence:</span>
-                      <span className="confidence-value">{sentiment.confidenceScore}%</span>
-                    </div>
-                    <div className="trend-indicator">
-                      <span className="trend-label">Trend:</span>
-                      <span className={`trend-value trend-${sentiment.trend.toLowerCase()}`}>
-                        {sentiment.trend}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ))}
+      {/* Data Summary */}
+      {forexDataSummary && (
+        <div className="card">
+          <h2>📊 Data Summary</h2>
+          <div className="data-summary-grid">
+            <div className="summary-item">
+              <span className="summary-label">Total Events</span>
+              <span className="summary-value">{forexDataSummary.totalEvents.toLocaleString()}</span>
             </div>
-            <div className="scorecard-info">
-              <h4>About the Scorecard</h4>
-              <p>The Currency Bias Scorecard analyzes multiple economic pillars including:</p>
-              <ul>
-                <li><strong>Policy (25%):</strong> Central bank decisions and monetary policy</li>
-                <li><strong>Inflation (15%):</strong> Price stability and inflation trends</li>
-                <li><strong>Growth (15%):</strong> Economic growth and GDP indicators</li>
-                <li><strong>Labor (5%):</strong> Employment and wage data</li>
-                <li><strong>External (10%):</strong> Trade balance and external factors</li>
-                <li><strong>Terms of Trade (10%):</strong> Export/import price ratios</li>
-                <li><strong>Fiscal (7.5%):</strong> Government spending and taxation</li>
-                <li><strong>Politics (5%):</strong> Political stability and policy changes</li>
-                <li><strong>Financial Conditions (5%):</strong> Market liquidity and credit</li>
-                <li><strong>Valuation (7.5%):</strong> Currency valuation metrics</li>
-              </ul>
+            <div className="summary-item">
+              <span className="summary-label">Currencies</span>
+              <span className="summary-value">{forexDataSummary.currencies.length}</span>
+            </div>
+            <div className="summary-item">
+              <span className="summary-label">Data Coverage</span>
+              <span className="summary-value">
+                {new Date(forexDataSummary.dateRange.start).toLocaleDateString()} - {new Date(forexDataSummary.dateRange.end).toLocaleDateString()}
+              </span>
+            </div>
+            <div className="summary-item">
+              <span className="summary-label">Last Update</span>
+              <span className="summary-value">{new Date().toLocaleTimeString()}</span>
             </div>
           </div>
-        )}
-
-        {activeView === 'algorithm' && (
-          <SentimentAnalysisInfo />
-        )}
-
-        {activeView === 'manage' && (
-          <EventManagement 
-            events={data.recentEvents}
-            onEventUpdated={handleEventUpdated}
-            onEventDeleted={handleEventDeleted}
-          />
-        )}
-
-        {activeView === 'strategy' && (
-          <StrategyMonitor />
-        )}
-
-        {activeView === 'backtest' && (
-          <BacktestTable />
-        )}
-      </main>
-
-      {/* Add News Form Modal */}
-      {showAddNewsForm && (
-        <AddNewsForm 
-          onNewsAdded={handleNewsAdded}
-          onClose={handleCloseAddNews}
-        />
+        </div>
       )}
+
+      {/* Data Refresh Controls */}
+      <div className="card">
+        <h2>🔄 Data Management</h2>
+        <div className="refresh-controls">
+          <div className="refresh-info">
+            <p>
+              <strong>Last Refresh:</strong> {lastRefresh ? lastRefresh.toLocaleString() : 'Never'}
+            </p>
+            <p>
+              <strong>Refresh Count:</strong> {refreshCount}
+            </p>
+            <p>
+              <strong>Time Since Last Refresh:</strong> {timeSinceLastRefresh}
+            </p>
+          </div>
+          <div className="refresh-actions">
+            <button 
+              className="btn btn-primary"
+              onClick={refreshData}
+              disabled={!canRefresh || isRefreshing}
+            >
+              {isRefreshing ? (
+                <>
+                  <span className="loading"></span> Refreshing...
+                </>
+              ) : (
+                '🔄 Refresh Data'
+              )}
+            </button>
+            <button 
+              className="btn btn-secondary"
+              onClick={fetchComprehensiveForexData}
+              disabled={isLoadingEvents || isLoadingPowerScores}
+            >
+              {isLoadingEvents || isLoadingPowerScores ? (
+                <>
+                  <span className="loading"></span> Loading...
+                </>
+              ) : (
+                '📊 Load Latest Data'
+              )}
+            </button>
+          </div>
+        </div>
+        {error && (
+          <div className="error-message">
+            ❌ Error: {error}
+          </div>
+        )}
+      </div>
+
+      {/* Market Status Header */}
+      <div className="card">
+        <h2>🌍 Market Status</h2>
+        <div className="dashboard-grid">
+          <div className="dashboard-card">
+            <div className="dashboard-value" style={{ color: marketStatus.isOpen ? 'var(--forex-green)' : 'var(--forex-red)' }}>
+              {marketStatus.isOpen ? 'OPEN' : 'CLOSED'}
+            </div>
+            <div className="dashboard-label">Market Status</div>
+          </div>
+          <div className="dashboard-card">
+            <div className="dashboard-value">{marketStatus.totalVolume}</div>
+            <div className="dashboard-label">Total Volume</div>
+          </div>
+          <div className="dashboard-card">
+            <div className="dashboard-value">{marketStatus.activePairs}</div>
+            <div className="dashboard-label">Active Pairs</div>
+          </div>
+          <div className="dashboard-card">
+            <div className="dashboard-value">
+              {marketStatus.lastUpdate.toLocaleTimeString()}
+            </div>
+            <div className="dashboard-label">Last Update</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Currency Sentiment Grid */}
+      <div className="card">
+        <h2>💱 Currency Sentiment Analysis</h2>
+        <div className="currency-grid">
+          {currencies.map((currency, index) => (
+            <div key={index} className="currency-card">
+              <div className="currency-header">
+                <div className="currency-code">{currency.currency}</div>
+                <div className="currency-sentiment" style={{ color: getSentimentColor(currency.sentiment) }}>
+                  {getSentimentIcon(currency.sentiment)} {currency.sentiment}
+                </div>
+              </div>
+              <div className="currency-price">${currency.price.toFixed(4)}</div>
+              <div className={`currency-change ${currency.change >= 0 ? 'positive' : 'negative'}`}>
+                {currency.change >= 0 ? '+' : ''}{currency.change.toFixed(4)} ({currency.changePercent >= 0 ? '+' : ''}{currency.changePercent.toFixed(2)}%)
+              </div>
+              <div style={{ marginTop: '1rem', fontSize: '0.9rem', color: 'var(--forex-text-secondary)' }}>
+                Confidence: {currency.confidence}%
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Economic Events from Forex Factory */}
+      <div className="card">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+          <h2>📅 Economic Events (Forex Factory)</h2>
+          <button 
+            className="btn btn-secondary"
+            onClick={fetchComprehensiveForexData}
+            disabled={isLoadingEvents || isLoadingPowerScores}
+          >
+            {isLoadingEvents || isLoadingPowerScores ? (
+              <>
+                <span className="loading"></span> Loading...
+              </>
+            ) : (
+              '🔄 Refresh Events'
+            )}
+          </button>
+        </div>
+        
+        {economicEvents.length > 0 ? (
+          <div className="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Currency</th>
+                  <th>Event</th>
+                  <th>Impact</th>
+                  <th>Date/Time</th>
+                  <th>Sentiment</th>
+                </tr>
+              </thead>
+              <tbody>
+                {economicEvents.map((event) => (
+                  <tr key={event.id}>
+                    <td>
+                      <strong>{event.currency}</strong>
+                    </td>
+                    <td>{event.title}</td>
+                    <td>
+                      <span 
+                        className="status" 
+                        style={{ 
+                          backgroundColor: getImpactColor(event.impact) + '20',
+                          color: getImpactColor(event.impact),
+                          borderColor: getImpactColor(event.impact)
+                        }}
+                      >
+                        {event.impact}
+                      </span>
+                    </td>
+                    <td>{formatEventDate(event.eventDate)}</td>
+                    <td>
+                      <span 
+                        className="status" 
+                        style={{ 
+                          backgroundColor: getSentimentColor(event.sentiment) + '20',
+                          color: getSentimentColor(event.sentiment),
+                          borderColor: getSentimentColor(event.sentiment)
+                        }}
+                      >
+                        {event.sentiment}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--forex-text-secondary)' }}>
+            {isLoadingEvents || isLoadingPowerScores ? (
+              <>
+                <span className="loading"></span> Loading economic events...
+              </>
+            ) : (
+              'No economic events available. Click "Refresh Events" to load data.'
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Currency Power Scores */}
+      <div className="card">
+        <h2>💪 Currency Power Scores</h2>
+        {isLoadingPowerScores ? (
+          <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--forex-text-secondary)' }}>
+            <span className="loading"></span> Loading power scores...
+          </div>
+        ) : currencyPowerScores.length > 0 ? (
+          <div className="currency-power-grid">
+            {currencyPowerScores.map(formatCurrencyPowerScore)}
+          </div>
+        ) : (
+          <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--forex-text-secondary)' }}>
+            No currency power scores available.
+          </div>
+        )}
+      </div>
     </div>
   );
 };

@@ -67,3 +67,24 @@ export const biasApiClient = {
   recompute: (payload: any) => biasApi.post(`/scorecard/recompute`, payload),
   getCalendar: (currency: string) => biasApi.get(`/calendar/${currency}`),
 };
+
+// New data refresh API endpoints
+export const dataRefreshApi = {
+  // Trigger fresh data collection from Forex Factory and other sources
+  triggerDataRefresh: () => api.post('/data/refresh'),
+  
+  // Get the latest data after refresh
+  getLatestData: () => api.get('/data/latest'),
+  
+  // Get data collection status
+  getDataStatus: () => api.get('/data/status'),
+  
+  // Get Forex Factory calendar data
+  getForexFactoryCalendar: (week?: string) => api.get(`/data/forex-factory${week ? `?week=${week}` : ''}`),
+  
+  // Get real-time economic indicators
+  getEconomicIndicators: () => api.get('/data/indicators'),
+  
+  // Get currency prices
+  getCurrencyPrices: () => api.get('/data/prices'),
+};
